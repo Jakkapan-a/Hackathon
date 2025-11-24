@@ -1,0 +1,5 @@
+# Ignore all CSV, TXT, and PDF files
+*.csv
+*.txt
+*.pdf
+*.sql
