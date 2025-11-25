@@ -1,37 +1,51 @@
-# ความสัมพันธ์ของข้อมูล Training Input และ Training Output
+# ความสัมพันธ์ของข้อมูล Training และ Enum Types
 
 ## ภาพรวม (Overview)
 
-โปรเจกต์นี้จัดการข้อมูลการยื่นบัญชีทรัพย์สินและหนี้สินของเจ้าหน้าที่รัฐ โดยแบ่งข้อมูลเป็น 2 ส่วนหลัก:
+โปรเจกต์นี้จัดการข้อมูลการยื่นบัญชีทรัพย์สินและหนี้สินของเจ้าหน้าที่รัฐ โดยแบ่งข้อมูลเป็น 3 ส่วนหลัก:
 
-- **Training Input**: ข้อมูลเอกสารและข้อมูลพื้นฐาน (Raw Data)
-- **Training Output**: ข้อมูลที่ถูกแยกและจัดโครงสร้างแล้ว (Structured Data)
+1. **Training Input**: ข้อมูลเอกสารและข้อมูลพื้นฐาน (Raw Data)
+2. **Training Output**: ข้อมูลที่ถูกแยกและจัดโครงสร้างแล้ว (Structured Data)
+3. **Enum Types**: ข้อมูลอ้างอิง (Reference Data) สำหรับประเภทต่างๆ
 
 ---
 
 ## โครงสร้างข้อมูล (Data Structure)
 
 ```
-training/
-├── train input/           # ข้อมูลต้นทาง
-│   ├── Train_doc_info.csv
-│   ├── Train_nacc_detail.csv
-│   └── Train_submitter_info.csv
+Hackathon2/
 │
-└── train output/          # ข้อมูลที่ประมวลผลแล้ว
-    ├── Train_statement.csv
-    ├── Train_statement_detail.csv
-    ├── Train_asset.csv
-    ├── Train_asset_land_info.csv
-    ├── Train_asset_building_info.csv
-    ├── Train_asset_vehicle_info.csv
-    ├── Train_asset_other_asset_info.csv
-    ├── Train_submitter_old_name.csv
-    ├── Train_submitter_position.csv
-    ├── Train_spouse_info.csv
-    ├── Train_spouse_old_name.csv
-    ├── Train_spouse_position.csv
-    └── Train_relative_info.csv
+├── training/
+│   ├── train input/           # ข้อมูลต้นทาง
+│   │   ├── Train_doc_info.csv
+│   │   ├── Train_nacc_detail.csv
+│   │   └── Train_submitter_info.csv
+│   │
+│   └── train output/          # ข้อมูลที่ประมวลผลแล้ว
+│       ├── Train_statement.csv
+│       ├── Train_statement_detail.csv
+│       ├── Train_asset.csv
+│       ├── Train_asset_land_info.csv
+│       ├── Train_asset_building_info.csv
+│       ├── Train_asset_vehicle_info.csv
+│       ├── Train_asset_other_asset_info.csv
+│       ├── Train_submitter_old_name.csv
+│       ├── Train_submitter_position.csv
+│       ├── Train_spouse_info.csv
+│       ├── Train_spouse_old_name.csv
+│       ├── Train_spouse_position.csv
+│       └── Train_relative_info.csv
+│
+└── enum_type/                  # ข้อมูลอ้างอิง (Enums)
+    ├── asset_acquisition_type.csv
+    ├── asset_type.csv
+    ├── date_acquiring_type.csv
+    ├── date_ending_type.csv
+    ├── position_category_type.csv
+    ├── position_period_type.csv
+    ├── relationship.csv
+    ├── statement_detail_type.csv
+    └── statement_type.csv
 ```
 
 ---
@@ -46,6 +60,7 @@ training/
 | `submitter_id` | รหัสผู้ยื่นบัญชี | เชื่อมข้อมูลผู้ยื่น |
 | `asset_id` | รหัสทรัพย์สิน | เชื่อมข้อมูลทรัพย์สินแต่ละประเภท |
 | `doc_id` | รหัสเอกสาร PDF | อ้างอิงไฟล์ต้นฉบับ |
+| `*_type_id` | รหัสประเภทต่างๆ | เชื่อมกับ enum_type |
 
 ---
 
@@ -92,11 +107,17 @@ doc_id,doc_location_url,type_id,nacc_id
 ```
 nacc_id → Train_nacc_detail.nacc_id
 submitter_id → Train_submitter_info.submitter_id
+statement_type_id → statement_type.statement_type_id (Enum)
 ```
 
 **ฟิลด์สำคัญ:**
 - `nacc_id`: รหัสเอกสาร
-- `statement_type_id`: ประเภทบัญชี (1=อสังหาริมทรัพย์, 2=สังหาริมทรัพย์, 3=หนี้สิน, 4=รายได้, 5=รายจ่าย)
+- `statement_type_id`: ประเภทบัญชี (FK → statement_type)
+  - 1 = รายได้
+  - 2 = รายจ่าย
+  - 3 = ภาษี
+  - 4 = ทรัพย์สิน
+  - 5 = หนี้สิน
 - `valuation_submitter`: มูลค่าของผู้ยื่น
 - `valuation_spouse`: มูลค่าของคู่สมรส
 - `valuation_child`: มูลค่าของบุตร
@@ -104,9 +125,9 @@ submitter_id → Train_submitter_info.submitter_id
 **ตัวอย่าง:**
 ```csv
 nacc_id,statement_type_id,valuation_submitter,valuation_spouse,valuation_child
-62,1,4963378.22,26829714.25,52308.97  # อสังหาริมทรัพย์
-62,2,15845100,2220446,35086229.03      # สังหาริมทรัพย์
-62,3,,16726000,1362720                 # หนี้สิน
+62,1,4963378.22,26829714.25,52308.97  # รายได้
+62,2,15845100,2220446,35086229.03      # รายจ่าย
+62,3,,16726000,1362720                 # ภาษี
 ```
 
 ---
@@ -118,10 +139,11 @@ nacc_id,statement_type_id,valuation_submitter,valuation_spouse,valuation_child
 ```
 nacc_id → Train_statement.nacc_id
 submitter_id → Train_submitter_info.submitter_id
-asset_id → Train_asset_land_info.asset_id (1:1)
-         → Train_asset_building_info.asset_id (1:1)
-         → Train_asset_vehicle_info.asset_id (1:1)
-         → Train_asset_other_asset_info.asset_id (1:1)
+asset_type_id → asset_type.asset_type_id (Enum)
+asset_acquisition_type_id → asset_acquisition_type.asset_acquisition_type_id (Enum)
+date_acquiring_type_id → date_acquiring_type.date_acquiring_type_id (Enum)
+date_ending_type_id → date_ending_type.date_ending_type_id (Enum)
+asset_id → Train_asset_[type]_info.asset_id (1:1)
 ```
 
 **ฟิลด์สำคัญ:**
@@ -129,8 +151,11 @@ asset_id → Train_asset_land_info.asset_id (1:1)
 - `submitter_id`: เจ้าของทรัพย์สิน
 - `nacc_id`: เอกสารที่ยื่น
 - `index`: ลำดับในเอกสาร
-- `asset_type_id`: ประเภททรัพย์สิน
+- `asset_type_id`: ประเภททรัพย์สิน (FK → asset_type)
 - `asset_name`: ชื่อทรัพย์สิน
+- `date_acquiring_type_id`: ประเภทวันที่ได้มา (FK → date_acquiring_type)
+- `acquiring_date/month/year`: วันที่ได้มา
+- `asset_acquisition_type_id`: วิธีการได้มา (FK → asset_acquisition_type)
 - `valuation`: มูลค่า
 - `owner_by_submitter`: เป็นของผู้ยื่นหรือไม่
 - `owner_by_spouse`: เป็นของคู่สมรสหรือไม่
@@ -173,23 +198,222 @@ asset_id,submitter_id,nacc_id,asset_type_id,asset_name,valuation,owner_by_submit
 
 ### 📝 ตารางข้อมูลเพิ่มเติมของผู้ยื่นและครอบครัว
 
-#### Train_submitter_old_name.csv
-ชื่อเดิมของผู้ยื่นบัญชี (กรณีเปลี่ยนชื่อ)
-
 #### Train_submitter_position.csv
 ตำแหน่งงานของผู้ยื่นบัญชี
+
+**ความสัมพันธ์:**
+- `position_category_id` → position_category_type (Enum)
+- `position_period_type_id` → position_period_type (Enum)
+
+#### Train_submitter_old_name.csv
+ชื่อเดิมของผู้ยื่นบัญชี (กรณีเปลี่ยนชื่อ)
 
 #### Train_spouse_info.csv
 ข้อมูลคู่สมรสของผู้ยื่นบัญชี
 
-#### Train_spouse_old_name.csv
-ชื่อเดิมของคู่สมรส
-
 #### Train_spouse_position.csv
 ตำแหน่งงานของคู่สมรส
 
+**ความสัมพันธ์:**
+- `position_category_id` → position_category_type (Enum)
+- `position_period_type_id` → position_period_type (Enum)
+
+#### Train_spouse_old_name.csv
+ชื่อเดิมของคู่สมรส
+
 #### Train_relative_info.csv
 ข้อมูลญาติที่เกี่ยวข้อง
+
+**ความสัมพันธ์:**
+- `relationship_id` → relationship (Enum)
+
+---
+
+## 3️⃣ Enum Types (ข้อมูลอ้างอิง)
+
+### 🏷️ asset_acquisition_type.csv
+วิธีการได้มาของทรัพย์สิน
+
+| ID | ชื่อ |
+|----|------|
+| 1 | ซื้อ |
+| 2 | มรดก |
+| 3 | ผู้จัดการมรดก |
+| 4 | ให้ |
+| 5 | สร้าง |
+| 6 | ไม่ได้ระบุในเอกสาร |
+
+**ใช้ใน:** Train_asset.csv (asset_acquisition_type_id)
+
+---
+
+### 🏗️ asset_type.csv
+ประเภททรัพย์สิน (แบ่งเป็น main type และ sub type)
+
+**โครงสร้าง:**
+- `asset_type_id`: รหัสประเภท (Primary Key)
+- `asset_type_main_type_name`: ประเภทหลัก
+- `asset_type_sub_type_name`: ประเภทย่อย
+
+**ตัวอย่าง:**
+
+#### ที่ดิน (1-9, 36)
+| ID | Sub Type |
+|----|----------|
+| 1 | โฉนด |
+| 2 | ส.ป.ก |
+| 3 | ส.ป.ก 4-01 |
+| 4 | น.ส.3 |
+| 5 | น.ส.3ก |
+| 6 | ภบท.5 |
+| 7 | ห้องชุด (อ.ช.2) |
+| 8 | สัญญาซื้อขาย |
+| 9 | น.ค.3 |
+| 36 | อื่นๆ |
+
+#### โรงเรือนและสิ่งปลูกสร้าง (10-17, 37)
+| ID | Sub Type |
+|----|----------|
+| 10 | บ้าน |
+| 11 | อาคาร |
+| 12 | ตึก |
+| 13 | ห้องชุด |
+| 14 | คอนโด |
+| 15 | หอพัก |
+| 16 | ลานจอดรถ |
+| 17 | โรงงาน |
+| 37 | อื่นๆ |
+
+#### ยานพาหนะ (18-21, 38)
+| ID | Sub Type |
+|----|----------|
+| 18 | รถยนต์ |
+| 19 | จักรยานยนต์ |
+| 20 | เรือยนต์ |
+| 21 | เครื่องบิน |
+| 38 | อื่นๆ |
+
+#### สิทธิและสัมปทาน (22-27, 39, 40)
+| ID | Sub Type |
+|----|----------|
+| 22 | กรมธรรม์ |
+| 23 | สัญญา |
+| 24 | สมาชิก |
+| 25 | กองทุน |
+| 26 | เงินสงเคราะห์ |
+| 27 | ป้ายประมูล |
+| 39 | อื่นๆ |
+
+#### ทรัพย์สินอื่น (28-35)
+| ID | Sub Type |
+|----|----------|
+| 28 | กระเป๋า |
+| 29 | อาวุธปืน |
+| 30 | นาฬิกา |
+| 31 | เครื่องประดับ |
+| 32 | วัตถุมงคล |
+| 33 | ทองคำ |
+| 34 | งานศิลปะ โบราณวัตถุ |
+| 35 | ของสะสมอื่น |
+
+**ใช้ใน:** Train_asset.csv (asset_type_id)
+
+---
+
+### 📅 date_acquiring_type.csv และ date_ending_type.csv
+ประเภทวันที่ได้มาและสิ้นสุดของทรัพย์สิน
+
+**ตัวอย่าง:**
+| ID | ชื่อ |
+|----|------|
+| 1 | ระบุวันที่ชัดเจน |
+| 2 | ระบุเฉพาะเดือนและปี |
+| 3 | ระบุเฉพาะปี |
+| 4 | ไม่ได้ระบุ |
+
+**ใช้ใน:** Train_asset.csv (date_acquiring_type_id, date_ending_type_id)
+
+---
+
+### 👔 position_category_type.csv
+ประเภทตำแหน่งของผู้ยื่นบัญชี (แบ่งเป็นหลายระดับ)
+
+**โครงสร้าง:**
+- `position_category_id`: รหัสตำแหน่ง
+- `corrupt0_category`: หมวดหมู่ Corrupt0
+- `nacc_category_number`: เลขหมวด NACC
+- `nacc_category`: หมวดหลัก NACC
+- `nacc_sub_category_number`: เลขหมวดย่อย
+- `nacc_sub_category`: หมวดย่อย NACC
+
+**ตัวอย่าง:**
+
+| ID | Category | Sub Category |
+|----|----------|--------------|
+| 1 | สมาชิกสภานิติบัญญัติแห่งชาติ | สมาชิกสภานิติบัญญัติแห่งชาติ |
+| 2 | ผู้ดำรงตำแหน่งทางการเมือง | นายกรัฐมนตรี |
+| 3 | ผู้ดำรงตำแหน่งทางการเมือง | รัฐมนตรี |
+| 4 | ผู้ดำรงตำแหน่งทางการเมือง | สมาชิกสภาผู้แทนราษฎร |
+| 5 | ผู้ดำรงตำแหน่งทางการเมือง | สมาชิกวุฒิสภา |
+| 6 | ผู้ดำรงตำแหน่งทางการเมือง | ข้าราชการการเมืองอื่น |
+| 8 | ตุลาการศาลรัฐธรรมนูญ | ตุลาการศาลรัฐธรรมนูญ |
+| 9-13 | ผู้ดำรงตำแหน่งในองค์กรอิสระ | (หลายหน่วยงาน) |
+| 14-27 | ข้าราชการระดับสูง | (หลายสายงาน) |
+| 28-34 | ผู้บริหารท้องถิ่น | (หลายระดับ) |
+
+**ใช้ใน:** Train_submitter_position.csv, Train_spouse_position.csv (position_category_id)
+
+---
+
+### ⏰ position_period_type.csv
+ช่วงเวลาการดำรงตำแหน่ง
+
+**ตัวอย่าง:**
+| ID | ชื่อ |
+|----|------|
+| 1 | เข้ารับตำแหน่ง |
+| 2 | พ้นจากตำแหน่ง |
+| 3 | ระหว่างดำรงตำแหน่ง |
+
+**ใช้ใน:** Train_submitter_position.csv, Train_spouse_position.csv (position_period_type_id)
+
+---
+
+### 👨‍👩‍👧‍👦 relationship.csv
+ความสัมพันธ์กับผู้ยื่นบัญชี
+
+| ID | ชื่อ |
+|----|------|
+| 1 | บิดา |
+| 2 | มารดา |
+| 3 | พี่น้อง |
+| 4 | บุตร |
+| 5 | บิดาคู่สมรส |
+| 6 | มารดาคู่สมรส |
+
+**ใช้ใน:** Train_relative_info.csv (relationship_id)
+
+---
+
+### 📊 statement_type.csv
+ประเภทรายการหลักในบัญชี
+
+| ID | ชื่อ |
+|----|------|
+| 1 | รายได้ |
+| 2 | รายจ่าย |
+| 3 | ภาษี |
+| 4 | ทรัพย์สิน |
+| 5 | หนี้สิน |
+
+**ใช้ใน:** Train_statement.csv (statement_type_id)
+
+---
+
+### 📝 statement_detail_type.csv
+ประเภทรายละเอียดรายการ (รายละเอียดเพิ่มเติมของ statement_type)
+
+**ใช้ใน:** Train_statement_detail.csv
 
 ---
 
@@ -218,6 +442,7 @@ asset_id,submitter_id,nacc_id,asset_type_id,asset_name,valuation,owner_by_submit
                 │   (สรุปมูลค่าตามประเภท)   │
                 │   PK: nacc_id +          │
                 │       statement_type_id  │
+                │   FK: statement_type ────┼─── [statement_type.csv]
                 └──────────────────────────┘
                           │
                           │
@@ -228,17 +453,31 @@ asset_id,submitter_id,nacc_id,asset_type_id,asset_name,valuation,owner_by_submit
                 │   PK: asset_id   │
                 │   FK: nacc_id    │
                 │       submitter_id│
+                │       asset_type_id ──────────── [asset_type.csv]
+                │       asset_acquisition_id ───── [asset_acquisition_type.csv]
+                │       date_acquiring_type_id ─── [date_acquiring_type.csv]
                 └─────────┬────────┘
                           │
-        ┌─────────────────┼─────────────────┐
-        │                 │                 │
-        ▼                 ▼                 ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│ Train_asset_ │  │ Train_asset_ │  │ Train_asset_ │
-│ land_info    │  │ building_info│  │ vehicle_info │
-│              │  │              │  │              │
-│ FK: asset_id │  │ FK: asset_id │  │ FK: asset_id │
-└──────────────┘  └──────────────┘  └──────────────┘
+        ┌─────────────────┼─────────────────┬─────────────────┐
+        ▼                 ▼                 ▼                 ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ Train_asset_ │  │ Train_asset_ │  │ Train_asset_ │  │ Train_asset_ │
+│ land_info    │  │ building_info│  │ vehicle_info │  │ other_info   │
+│              │  │              │  │              │  │              │
+│ FK: asset_id │  │ FK: asset_id │  │ FK: asset_id │  │ FK: asset_id │
+└──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘
+
+
+┌──────────────────────────┐
+│ Train_submitter_position │
+│ FK: position_category_id ├──── [position_category_type.csv]
+│ FK: position_period_id ──├──── [position_period_type.csv]
+└──────────────────────────┘
+
+┌──────────────────────────┐
+│ Train_relative_info      │
+│ FK: relationship_id ─────├──── [relationship.csv]
+└──────────────────────────┘
 ```
 
 ---
@@ -246,14 +485,22 @@ asset_id,submitter_id,nacc_id,asset_type_id,asset_name,valuation,owner_by_submit
 ## 🔄 กระบวนการประมวลผล (Processing Flow)
 
 ```
-1. INPUT: Train_doc_info.csv
+1. INPUT: Train_doc_info.csv + enum_type/*.csv
    └─> PDF ของเอกสารยื่นบัญชี (doc_location_url)
+   └─> โหลด Enum Types สำหรับการ mapping
 
 2. EXTRACT: ดึงข้อมูลจาก PDF
    └─> OCR / Text Extraction
    └─> Information Extraction
+   └─> Entity Recognition
 
 3. TRANSFORM: แปลงเป็นโครงสร้างข้อมูล
+   ├─> Map text → enum IDs (ใช้ EnumTypes class)
+   │   ├─> "ซื้อ" → asset_acquisition_type_id = 1
+   │   ├─> "โฉนด" → asset_type_id = 1
+   │   ├─> "ส.ส." → position_category_id = 4
+   │   └─> "บุตร" → relationship_id = 4
+   │
    ├─> Train_statement.csv (สรุปมูลค่า)
    ├─> Train_asset.csv (รายการทรัพย์สิน)
    └─> Train_asset_[type]_info.csv (รายละเอียดแต่ละประเภท)
@@ -264,9 +511,50 @@ asset_id,submitter_id,nacc_id,asset_type_id,asset_name,valuation,owner_by_submit
 
 ---
 
+## 🎯 การใช้ Enum Types
+
+### Class: EnumTypes (src/enum_type.py)
+
+ระบบมี Python class สำหรับจัดการ enum types:
+
+```python
+from enum_type import get_enum_types
+
+# โหลด enum types
+enums = get_enum_types()
+
+# หา ID จากชื่อ
+asset_acq_id = enums.get_asset_acquisition_id('ซื้อ')  # → 1
+asset_type_id = enums.get_asset_type_id('ที่ดิน', 'โฉนด')  # → 1
+position_id = enums.get_position_category_id('ส.ส.')  # → 4
+relationship_id = enums.get_relationship_id('บุตร')  # → 4
+
+# สร้าง context สำหรับ LLM
+context = enums.get_all_enum_context_for_llm()
+```
+
+### การใช้ใน LLM Prompt
+
+เมื่อสั่งให้ LLM extract ข้อมูล ควรใส่ enum context ไปด้วย:
+
+```python
+prompt = f"""
+{enums.get_all_enum_context_for_llm()}
+
+จากเอกสารต่อไปนี้ ให้ดึงข้อมูลทรัพย์สินและแปลงเป็น JSON:
+- asset_type_id: ใช้ ID จาก asset_type ด้านบน
+- asset_acquisition_type_id: ใช้ ID จาก asset_acquisition_type ด้านบน
+
+เอกสาร:
+{document_text}
+"""
+```
+
+---
+
 ## 📌 ตัวอย่างการใช้งาน (Use Cases)
 
-### ค้นหาทรัพย์สินทั้งหมดของผู้ยื่นบัญชีคนหนึ่ง
+### 1. ค้นหาทรัพย์สินทั้งหมดของผู้ยื่นบัญชีคนหนึ่ง
 
 ```python
 # 1. หา nacc_id จาก doc_id
@@ -280,53 +568,151 @@ submitter_id = submitter['submitter_id'].values[0]  # submitter_id = 40
 # 3. หาทรัพย์สินทั้งหมด
 assets = Train_asset[Train_asset['submitter_id'] == submitter_id]
 
-# 4. หารายละเอียดที่ดิน
-land_assets = assets[assets['asset_type_id'] == 1]
-land_details = Train_asset_land_info[
-    Train_asset_land_info['asset_id'].isin(land_assets['asset_id'])
-]
+# 4. Join กับ enum เพื่อแสดงชื่อประเภท
+assets_with_type = assets.merge(
+    enums.asset_types,
+    on='asset_type_id'
+)
 ```
 
-### คำนวณมูลค่าทรัพย์สินรวม
+### 2. วิเคราะห์ทรัพย์สินตามประเภท
 
 ```python
-# มูลค่ารวมจาก Train_statement
-total_real_estate = Train_statement[
-    (Train_statement['nacc_id'] == 62) &
-    (Train_statement['statement_type_id'] == 1)
-]['valuation_submitter'].sum()
+# นับจำนวนทรัพย์สินแต่ละประเภท
+asset_summary = Train_asset.merge(
+    enums.asset_types,
+    on='asset_type_id'
+).groupby('asset_type_main_type_name').agg({
+    'asset_id': 'count',
+    'valuation': 'sum'
+})
 
-# หรือคำนวณจาก Train_asset
-total_assets = Train_asset[
-    (Train_asset['nacc_id'] == 62) &
-    (Train_asset['owner_by_submitter'] == True)
-]['valuation'].sum()
+print(asset_summary)
+# Output:
+#                            asset_id  valuation
+# asset_type_main_type_name
+# ที่ดิน                           15  150000000
+# โรงเรือนและสิ่งปลูกสร้าง          8   80000000
+# ยานพาหนะ                        12    5000000
+```
+
+### 3. ตรวจสอบตำแหน่งของผู้ยื่น
+
+```python
+# หาตำแหน่งของผู้ยื่น
+position = Train_submitter_position.merge(
+    enums.position_category_types,
+    on='position_category_id'
+)
+
+# แสดงชื่อตำแหน่ง
+print(position[['nacc_id', 'nacc_sub_category', 'position_period_type_id']])
+```
+
+### 4. วิเคราะห์วิธีการได้มาของทรัพย์สิน
+
+```python
+# สถิติวิธีการได้มา
+acquisition_stats = Train_asset.groupby('asset_acquisition_type_id').agg({
+    'asset_id': 'count',
+    'valuation': 'sum'
+})
+
+# Map กับชื่อวิธีการ
+for idx, row in acquisition_stats.iterrows():
+    type_name = enums.asset_acquisition_types[idx]
+    print(f"{type_name}: {row['asset_id']} รายการ, มูลค่า {row['valuation']:,.0f} บาท")
 ```
 
 ---
 
-## 🎯 สรุป
+## 🗂️ สรุปตารางความสัมพันธ์
 
-| ลำดับ | Input | ความสัมพันธ์ | Output |
-|-------|-------|--------------|--------|
-| 1 | `Train_doc_info.csv` | `nacc_id` ➜ | `Train_statement.csv` |
-| 2 | `Train_submitter_info.csv` | `submitter_id` ➜ | `Train_asset.csv` |
-| 3 | `Train_asset.csv` | `asset_id` ➜ | `Train_asset_land_info.csv` |
-| 4 | `Train_asset.csv` | `asset_id` ➜ | `Train_asset_building_info.csv` |
-| 5 | `Train_asset.csv` | `asset_id` ➜ | `Train_asset_vehicle_info.csv` |
-| 6 | `Train_asset.csv` | `asset_id` ➜ | `Train_asset_other_asset_info.csv` |
+### Training Input → Output
+
+| Input | Key | Output | Description |
+|-------|-----|--------|-------------|
+| Train_doc_info | `nacc_id` | Train_statement | สรุปมูลค่า |
+| Train_submitter_info | `submitter_id` | Train_asset | รายการทรัพย์สิน |
+| Train_asset | `asset_id` | Train_asset_land_info | รายละเอียดที่ดิน |
+| Train_asset | `asset_id` | Train_asset_building_info | รายละเอียดอาคาร |
+| Train_asset | `asset_id` | Train_asset_vehicle_info | รายละเอียดยานพาหนะ |
+| Train_asset | `asset_id` | Train_asset_other_asset_info | รายละเอียดทรัพย์อื่น |
+
+### Training Output → Enum Types
+
+| Output Table | Enum Field | Enum Table | Description |
+|--------------|------------|------------|-------------|
+| Train_statement | `statement_type_id` | statement_type | ประเภทรายการ (รายได้/จ่าย/ภาษี/ทรัพย์/หนี้) |
+| Train_asset | `asset_type_id` | asset_type | ประเภททรัพย์สิน |
+| Train_asset | `asset_acquisition_type_id` | asset_acquisition_type | วิธีการได้มา |
+| Train_asset | `date_acquiring_type_id` | date_acquiring_type | ประเภทวันที่ได้มา |
+| Train_asset | `date_ending_type_id` | date_ending_type | ประเภทวันที่สิ้นสุด |
+| Train_submitter_position | `position_category_id` | position_category_type | ตำแหน่งผู้ยื่น |
+| Train_submitter_position | `position_period_type_id` | position_period_type | ช่วงเวลาตำแหน่ง |
+| Train_spouse_position | `position_category_id` | position_category_type | ตำแหน่งคู่สมรส |
+| Train_spouse_position | `position_period_type_id` | position_period_type | ช่วงเวลาตำแหน่ง |
+| Train_relative_info | `relationship_id` | relationship | ความสัมพันธ์กับผู้ยื่น |
 
 ---
 
-## 💡 หมายเหตุ
+## 💡 หมายเหตุสำคัญ
 
-- ข้อมูลใน **train input** เป็นข้อมูลต้นทางที่ยังไม่ได้ประมวลผล
-- ข้อมูลใน **train output** เป็นข้อมูลที่ผ่านการ extract และ transform แล้ว
-- การเชื่อมโยงข้อมูลใช้ `nacc_id` เป็นหลัก และ `submitter_id` สำหรับข้อมูลผู้ยื่น
-- แต่ละทรัพย์สินมี `asset_id` ที่ unique และเชื่อมกับตารางรายละเอียดตามประเภท
+1. **Enum Types เป็นข้อมูลอ้างอิง** ที่ไม่ควรเปลี่ยนแปลงบ่อย เพราะมีผลกับข้อมูลทั้งหมดในระบบ
+
+2. **การใช้ Foreign Key** ช่วยให้:
+   - ประหยัดพื้นที่เก็บข้อมูล (เก็บ ID แทนข้อความ)
+   - รักษาความสอดคล้องของข้อมูล (Data Integrity)
+   - ค้นหาและวิเคราะห์ได้เร็วขึ้น
+
+3. **EnumTypes Class** (src/enum_type.py) มีฟังก์ชันช่วย:
+   - `get_*_id()`: แปลงชื่อเป็น ID
+   - `get_*_prompt_context()`: สร้าง context สำหรับ LLM
+   - `get_all_enum_context_for_llm()`: รวม context ทั้งหมด
+
+4. **การทำงานกับ LLM**:
+   - ต้องส่ง enum context ไปในพรอมต์
+   - LLM จะได้ทราบว่าต้อง return ID ไหน
+   - ช่วยให้ผลลัพธ์มีความสอดคล้องและ validate ได้
+
+5. **Hierarchical Structure**:
+   - asset_type มี main type และ sub type
+   - position_category มีหลายระดับ (category → sub_category)
+   - ต้องระวังเวลา query และ join
+
+---
+
+## 🔍 การตรวจสอบความถูกต้อง (Validation)
+
+### ตรวจสอบ Foreign Key
+
+```python
+# ตรวจสอบว่า asset_type_id ทั้งหมดใน Train_asset มีอยู่ใน enum
+invalid_types = Train_asset[
+    ~Train_asset['asset_type_id'].isin(enums.asset_types['asset_type_id'])
+]
+
+if len(invalid_types) > 0:
+    print(f"พบ asset_type_id ไม่ถูกต้อง {len(invalid_types)} รายการ")
+    print(invalid_types)
+```
+
+### ตรวจสอบความสมบูรณ์
+
+```python
+# ตรวจสอบทรัพย์สินที่ไม่มีรายละเอียด
+land_assets = Train_asset[Train_asset['asset_type_id'].between(1, 9)]
+assets_without_detail = land_assets[
+    ~land_assets['asset_id'].isin(Train_asset_land_info['asset_id'])
+]
+
+if len(assets_without_detail) > 0:
+    print(f"พบทรัพย์สินที่ดินที่ไม่มีรายละเอียด {len(assets_without_detail)} รายการ")
+```
 
 ---
 
 **สร้างโดย**: Claude Code
 **วันที่**: 2025-11-24
-**จุดประสงค์**: อธิบายความสัมพันธ์ระหว่างข้อมูล Training Input และ Output สำหรับโปรเจกต์วิเคราะห์บัญชีทรัพย์สินเจ้าหน้าที่รัฐ
+**เวอร์ชัน**: 2.0 (รวม Enum Types)
+**จุดประสงค์**: อธิบายความสัมพันธ์ระหว่าง Training Data และ Enum Types สำหรับโปรเจกต์วิเคราะห์บัญชีทรัพย์สินเจ้าหน้าที่รัฐ

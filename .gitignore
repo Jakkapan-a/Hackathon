@@ -3,3 +3,11 @@
 *.txt
 *.pdf
 *.sql
+*.png
+*.jpg
+.env
+
+*/images/*
+
+venv/*
+*__pycache__*

@@ -1,6 +1,7 @@
 from pdf2image import convert_from_path
 from PIL import Image
 import os
+import fitz  # PyMuPDF
 
 
 def pdf_to_images(pdf_path, output_folder=None, dpi=200, fmt='PNG'):
@@ -36,7 +37,30 @@ def pdf_to_images(pdf_path, output_folder=None, dpi=200, fmt='PNG'):
 
     # Convert PDF to images
     print(f"Converting PDF: {pdf_path}")
-    images = convert_from_path(pdf_path, dpi=dpi)
+
+    # ลอง pdf2image ก่อน
+    poppler_path = r"C:\tools\poppler-24.08.0\Library\bin"
+    try:
+        images = convert_from_path(pdf_path, dpi=dpi, poppler_path=poppler_path)
+        use_pdf2image = True
+    except Exception as e:
+        print(f"pdf2image failed: {e}")
+        print(f"Trying PyMuPDF (fitz) instead...")
+        use_pdf2image = False
+
+        # ใช้ PyMuPDF แทน
+        doc = fitz.open(pdf_path)
+        images = []
+        zoom = dpi / 72  # Convert DPI to zoom factor
+        mat = fitz.Matrix(zoom, zoom)
+
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            pix = page.get_pixmap(matrix=mat)
+            # Convert to PIL Image
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            images.append(img)
+        doc.close()
 
     # Save images
     saved_paths = []
@@ -44,7 +68,13 @@ def pdf_to_images(pdf_path, output_folder=None, dpi=200, fmt='PNG'):
 
     for i, image in enumerate(images, start=1):
         image_path = os.path.join(output_folder, f"{pdf_name}_page_{i}.{fmt.lower()}")
-        image.save(image_path, fmt)
+
+        if use_pdf2image:
+            image.save(image_path, fmt)
+        else:
+            # PIL Image from PyMuPDF
+            image.save(image_path, fmt)
+
         saved_paths.append(image_path)
         print(f"Saved page {i}/{len(images)}: {image_path}")
 
