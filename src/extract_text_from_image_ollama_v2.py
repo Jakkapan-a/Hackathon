@@ -12,7 +12,7 @@ def extract_text_from_image_ollama(
     temperature: float = 0.1,
     top_p: float = 0.6,
     repetition_penalty: float = 1.1,
-    keep_alive: str = "0",
+    keep_alive: str = "5m",
 ):
     """
     Extract text from image using Ollama with full parameter control
@@ -72,6 +72,7 @@ def extract_text_from_image_ollama(
             extra_body={
                 "repetition_penalty": repetition_penalty,
                 "keep_alive": keep_alive,
+                "seed": 1
             }
         )
         

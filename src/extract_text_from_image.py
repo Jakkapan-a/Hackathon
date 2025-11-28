@@ -105,7 +105,7 @@ def extract_text_from_image(
             raise ValueError("API key is required. Set TYPHOON_API_KEY environment variable or pass api_key parameter.")
     print(f"Using API Key: {'*' * (len(api_key) - 4) + api_key[-4:]}")
     if model is None:
-        model = os.getenv("TYPHOON_MODEL", "typhoon-ocr-preview")
+        model = os.getenv("TYPHOON_MODEL", "typhoon-ocr")
     if task_type is None:
         task_type = os.getenv("TYPHOON_TASK_TYPE", "default")
     if max_tokens is None:

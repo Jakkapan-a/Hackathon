@@ -1,4 +1,7 @@
 import os
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from src.load_test_doc import load_test_phase_csvs
 
 if __name__ == "__main__":
@@ -80,22 +83,36 @@ if __name__ == "__main__":
 
             for image_file in image_files:
                 image_path = os.path.join(images_folder, image_file)
-                print(f"Processing OCR for image: {image_path}")
 
                 # Call OCR function (either Ollama or API based on OCR_METHOD)
                 try:
+                    print("========= Time Taken for OCR =========")
+                    print(f"Processing OCR for image: {image_path}")
+                    timeStart = time.time()
+                    txt_filename = os.path.splitext(image_file)[0] + ".txt"
+                    txt_path = os.path.join(images_folder, txt_filename)
+                    # continue if txt_path already exists
+                    if os.path.exists(txt_path):
+                        print(f"✓ OCR result already exists, skipping: {txt_path}")
+                        continue
+
                     ocr_result = ocr_function(image_path)
 
-                    if ocr_result:
-                        # Create output .txt file with same name as image
-                        txt_filename = os.path.splitext(image_file)[0] + ".txt"
-                        txt_path = os.path.join(images_folder, txt_filename)
 
+                    if ocr_result:
+
+                        # Create output .txt file with same name as image
                         # Save OCR result to .txt file
                         with open(txt_path, 'w', encoding='utf-8') as f:
                             f.write(ocr_result)
 
                         print(f"✓ Saved OCR result to: {txt_path}")
+
+                        elapsed = time.time() - timeStart
+
+                        print(f"Time: {elapsed:.2f} seconds, length: {len(ocr_result)} chars")
+                        print("========= Time END =========")
+
                     else:
                         print(f"✗ OCR failed for: {image_file}")
 
