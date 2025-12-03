@@ -1,0 +1,4 @@
+# Ignore all CSV, TXT, and PDF files
+./pdf/*
+*.json
+*.db

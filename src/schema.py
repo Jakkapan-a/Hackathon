@@ -175,8 +175,44 @@ JSON_SCHEMA = {
                 "district": {"type": ["string", "null"]},
                 "province": {"type": ["string", "null"]},
                 "post_code": {"type": ["string", "null"]},
-                "position": {"type": ["string", "null"]},
-                "agency": {"type": ["string", "null"]}
+                "positions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "position_period_type_id": {"type": ["integer", "null"]},
+                            "index": {"type": ["integer", "null"]},
+                            "position": {"type": ["string", "null"]},
+                            "position_category_type_id": {"type": ["integer", "null"]},
+                            "workplace": {"type": ["string", "null"]},
+                            "workplace_location": {"type": ["string", "null"]},
+                            "date_acquiring_type_id": {"type": ["integer", "null"]},
+                            "start_date": {"type": ["integer", "null"]},
+                            "start_month": {"type": ["integer", "null"]},
+                            "start_year": {"type": ["integer", "null"]},
+                            "date_ending_type_id": {"type": ["integer", "null"]},
+                            "end_date": {"type": ["integer", "null"]},
+                            "end_month": {"type": ["integer", "null"]},
+                            "end_year": {"type": ["integer", "null"]},
+                            "note": {"type": ["string", "null"]}
+                        }
+                    }
+                },
+                "old_names": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "index": {"type": ["integer", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "first_name": {"type": ["string", "null"]},
+                            "last_name": {"type": ["string", "null"]},
+                            "title_en": {"type": ["string", "null"]},
+                            "first_name_en": {"type": ["string", "null"]},
+                            "last_name_en": {"type": ["string", "null"]}
+                        }
+                    }
+                }
             }
         },
 
@@ -194,7 +230,36 @@ JSON_SCHEMA = {
                 "sub_district": {"type": ["string", "null"]},
                 "district": {"type": ["string", "null"]},
                 "province": {"type": ["string", "null"]},
-                "post_code": {"type": ["string", "null"]}
+                "post_code": {"type": ["string", "null"]},
+                "positions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "position_period_type_id": {"type": ["integer", "null"]},
+                            "index": {"type": ["integer", "null"]},
+                            "position": {"type": ["string", "null"]},
+                            "workplace": {"type": ["string", "null"]},
+                            "workplace_location": {"type": ["string", "null"]},
+                            "note": {"type": ["string", "null"]}
+                        }
+                    }
+                },
+                "old_names": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "index": {"type": ["integer", "null"]},
+                            "title": {"type": ["string", "null"]},
+                            "first_name": {"type": ["string", "null"]},
+                            "last_name": {"type": ["string", "null"]},
+                            "title_en": {"type": ["string", "null"]},
+                            "first_name_en": {"type": ["string", "null"]},
+                            "last_name_en": {"type": ["string", "null"]}
+                        }
+                    }
+                }
             }
         },
 

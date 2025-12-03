@@ -22,7 +22,14 @@ PDF_DIR = os.path.join(INPUT_BASE_DIR, PDF_FOLDER)
 # Set to "true" to skip each phase (for debugging/testing)
 SKIP_PHASE_1 = os.getenv("SKIP_PHASE_1", "false").lower() == "true"  # PDF to Image
 SKIP_PHASE_2 = os.getenv("SKIP_PHASE_2", "false").lower() == "true"  # OCR Processing
-SKIP_PHASE_3 = os.getenv("SKIP_PHASE_3", "false").lower() == "true"  # LLM Parsing
+SKIP_PHASE_3 = os.getenv("SKIP_PHASE_3", "false").lower() == "true"  # LLM Parsing (Text → JSON)
+SKIP_PHASE_4 = os.getenv("SKIP_PHASE_4", "false").lower() == "true"  # JSON to CSV/Database
+SKIP_PHASE_5 = os.getenv("SKIP_PHASE_5", "false").lower() == "true"  # Summary Generation
+
+# ================ LLM Parser Configuration ================
+# LLM parsing mode: "combined" (all pages at once) or "page_by_page" (parse each page then merge)
+LLM_PARSE_MODE = os.getenv("LLM_PARSE_MODE", "page_by_page")
+LLM_MAX_WORKERS = int(os.getenv("LLM_MAX_WORKERS", "5"))  # Parallel workers for page-by-page mode
 
 if __name__ == "__main__":
     # Print configuration
@@ -34,6 +41,10 @@ if __name__ == "__main__":
     print(f"SKIP_PHASE_1: {SKIP_PHASE_1}")
     print(f"SKIP_PHASE_2: {SKIP_PHASE_2}")
     print(f"SKIP_PHASE_3: {SKIP_PHASE_3}")
+    print(f"SKIP_PHASE_4: {SKIP_PHASE_4}")
+    print(f"SKIP_PHASE_5: {SKIP_PHASE_5}")
+    print(f"LLM_PARSE_MODE: {LLM_PARSE_MODE}")
+    print(f"LLM_MAX_WORKERS: {LLM_MAX_WORKERS}")
     print("=================================================\n")
 
     # Load File doc info
@@ -41,7 +52,7 @@ if __name__ == "__main__":
     print(f"Loaded {len(data['doc_info'])} document info records.")
 
     # =================== Phase 1: PDF to Image ===================
-    print("=================== Phase 1 Coversion PDF to Image ===================")
+    print("\n=================== Phase 1: PDF to Image ===================")
     if SKIP_PHASE_1:
         print("⏭️  Phase 1 SKIPPED (SKIP_PHASE_1=true)")
     else:
@@ -68,29 +79,29 @@ if __name__ == "__main__":
 
                 # สร้าง folder command
 
-                # os.makedirs(images_folder, exist_ok=True)
-                # print(f"Created folder: {output_folder}")
-                # print(f"Created subfolder: {images_folder}")
-                # # Remove * all files in images_folder
-                # for img_file in os.listdir(images_folder):
-                #     img_path = os.path.join(images_folder, img_file)
-                #     if os.path.isfile(img_path):
-                #         os.remove(img_path)
-                #         print(f"Removed old image file: {img_path}")
+                os.makedirs(images_folder, exist_ok=True)
+                print(f"Created folder: {output_folder}")
+                print(f"Created subfolder: {images_folder}")
+                # Remove * all files in images_folder
+                for img_file in os.listdir(images_folder):
+                    img_path = os.path.join(images_folder, img_file)
+                    if os.path.isfile(img_path):
+                        os.remove(img_path)
+                        print(f"Removed old image file: {img_path}")
 
-                # # Extract PDF to images
-                # from src.pdf_to_image import pdf_to_images
-                # try:
-                #     pdf_to_images(path, images_folder)
-                # except Exception as e:
-                #     print(f"ERROR: Failed to convert PDF to images: {e}")
-                #     print(f"Skipping this PDF and continuing to next file...")
+                # Extract PDF to images
+                from src.pdf_to_image import pdf_to_images
+                try:
+                    pdf_to_images(path, images_folder)
+                except Exception as e:
+                    print(f"ERROR: Failed to convert PDF to images: {e}")
+                    print(f"Skipping this PDF and continuing to next file...")
 
             else:
                 print(f"File does not exist: {path}")
 
     # =================== Phase 2: OCR Processing ===================
-    print("=================== Phase 2 OCR Processing ===================")
+    print("\n=================== Phase 2: Image to Text (OCR) ===================")
     if SKIP_PHASE_2:
         print("⏭️  Phase 2 SKIPPED (SKIP_PHASE_2=true)")
     else:
@@ -159,20 +170,19 @@ if __name__ == "__main__":
             else:
                 print(f"Images folder does not exist: {images_folder}")
 
-    # =================== Phase 3: LLM Parsing ===================
-    print("=================== Phase 3 LLM Parsing(Text → Structured Data) ===================")
+    # =================== Phase 3: LLM Parsing (Text → JSON) ===================
+    print("\n=================== Phase 3: Text to JSON (LLM Parsing) ===================")
     if SKIP_PHASE_3:
         print("⏭️  Phase 3 SKIPPED (SKIP_PHASE_3=true)")
     else:
-        # Initialize LLM Parser and CSV Converter
+        # Initialize LLM Parser
         LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4.1-mini")
         print(f"Using LLM Model: {LLM_MODEL}")
 
         parser = LLMParser(model=LLM_MODEL, temperature=0.1)
 
-        # Create output directory (using configured OUTPUT_DIR)
+        # Create output directory
         os.makedirs(OUTPUT_DIR, exist_ok=True)
-        converter = JSONToCSVConverter(OUTPUT_DIR)
 
         # Process each document
         for doc_info in data['doc_info']:
@@ -189,10 +199,7 @@ if __name__ == "__main__":
             # Check if JSON output already exists
             json_output_path = os.path.join(OUTPUT_DIR, f"{file_base_name}.json")
             if os.path.exists(json_output_path):
-                print(f"✓ JSON output already exists, loading: {json_output_path}")
-                with open(json_output_path, 'r', encoding='utf-8') as f:
-                    parsed_data = json.load(f)
-                converter.process_document(parsed_data)
+                print(f"✓ JSON output already exists, skipping: {json_output_path}")
                 continue
 
             # Check if OCR txt files exist
@@ -212,7 +219,12 @@ if __name__ == "__main__":
                 print(f"Calling LLM to parse document...")
                 timeStart = time.time()
 
-                parsed_data = parser.parse_document_from_files(images_folder, doc_id, nacc_id)
+                # Use v2 parser with configurable mode
+                parsed_data = parser.parse_document_from_files_v2(
+                    images_folder, doc_id, nacc_id,
+                    mode=LLM_PARSE_MODE,
+                    max_workers=LLM_MAX_WORKERS
+                )
 
                 elapsed = time.time() - timeStart
                 print(f"✓ LLM parsing completed in {elapsed:.2f} seconds")
@@ -220,10 +232,10 @@ if __name__ == "__main__":
                 print(f"  Confidence: {parsed_data.get('confidence_score', 0):.2f}")
 
                 # Save JSON output
-                converter.save_json(parsed_data, f"{file_base_name}.json")
-
-                # Process for CSV
-                converter.process_document(parsed_data)
+                json_output_path = os.path.join(OUTPUT_DIR, f"{file_base_name}.json")
+                with open(json_output_path, 'w', encoding='utf-8') as f:
+                    json.dump(parsed_data, f, ensure_ascii=False, indent=2)
+                print(f"✓ Saved JSON to: {json_output_path}")
 
             except Exception as e:
                 print(f"✗ Error parsing document {doc_id}: {e}")
@@ -231,9 +243,91 @@ if __name__ == "__main__":
                 traceback.print_exc()
                 continue
 
-        # Save all CSV files
-        print("\n=================== Saving CSV Output Files ===================")
-        converter.save_all_csv()
-        print(f"\n✓ All output files saved to: {OUTPUT_DIR}")
+    # =================== Phase 4: JSON to CSV/Database ===================
+    print("\n=================== Phase 4: JSON to CSV/Database ===================")
+    if SKIP_PHASE_4:
+        print("⏭️  Phase 4 SKIPPED (SKIP_PHASE_4=true)")
+    else:
+        # Create output directory and converter
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        converter = JSONToCSVConverter(OUTPUT_DIR)
 
-    print("\n=================== All Phases Completed ===================")
+        # Load input data for summary generation
+        print("\n--- Loading Input Data ---")
+        converter.load_input_data(INPUT_BASE_DIR)
+
+        # Load all JSON files and process
+        json_files = sorted([f for f in os.listdir(OUTPUT_DIR) if f.endswith('.json')])
+        print(f"Found {len(json_files)} JSON files to process")
+
+        for json_file in json_files:
+            json_path = os.path.join(OUTPUT_DIR, json_file)
+            print(f"Processing: {json_file}")
+
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    parsed_data = json.load(f)
+                converter.process_document(parsed_data)
+                print(f"✓ Processed: {json_file}")
+            except Exception as e:
+                print(f"✗ Error processing {json_file}: {e}")
+                continue
+
+        # Save all CSV files
+        print("\n--- Saving CSV Files ---")
+        converter.save_all_csv()
+
+        # Save to SQLite database
+        print("\n--- Saving to SQLite Database ---")
+        enum_dir = os.path.join(os.path.dirname(INPUT_BASE_DIR), "enum_type")
+        if not os.path.exists(enum_dir):
+            enum_dir = "./enum_type"  # Fallback to relative path
+
+        converter.save_to_sqlite(
+            db_name="nacc_data.db",
+            input_dir=INPUT_BASE_DIR,
+            enum_dir=enum_dir,
+            training_dir="./training/train output",
+            import_external=True
+        )
+
+        print(f"✓ Phase 4 completed. Output saved to: {OUTPUT_DIR}")
+
+    # =================== Phase 5: Summary Generation ===================
+    print("\n=================== Phase 5: Summary Generation ===================")
+    if SKIP_PHASE_5:
+        print("⏭️  Phase 5 SKIPPED (SKIP_PHASE_5=true)")
+    else:
+        # Check if database exists
+        db_path = os.path.join(OUTPUT_DIR, "nacc_data.db")
+        if not os.path.exists(db_path):
+            print(f"✗ Database not found: {db_path}")
+            print("  Please run Phase 4 first to create the database.")
+        else:
+            # Create converter for running validation query
+            converter = JSONToCSVConverter(OUTPUT_DIR)
+
+            # Run validation query and export summary
+            print("\n--- Running Validation Query (SQL) ---")
+            converter.run_validation_query(
+                db_name="nacc_data.db",
+                output_csv="validation_summary.csv"
+            )
+
+            print(f"\n✓ Phase 5 completed. Summary saved to: {OUTPUT_DIR}/validation_summary.csv")
+
+    # =================== All Phases Completed ===================
+    print("\n" + "=" * 60)
+    print("                    All Phases Completed")
+    print("=" * 60)
+    print(f"\nOutput Directory: {OUTPUT_DIR}")
+    print("\nGenerated Files:")
+    print("  Phase 3: *.json (LLM parsed data)")
+    print("  Phase 4: Train_*.csv, nacc_data.db")
+    print("  Phase 5: validation_summary.csv")
+    print("\nTo skip specific phases, set environment variables:")
+    print("  SKIP_PHASE_1=true  (PDF to Image)")
+    print("  SKIP_PHASE_2=true  (OCR)")
+    print("  SKIP_PHASE_3=true  (LLM Parsing)")
+    print("  SKIP_PHASE_4=true  (JSON to CSV/DB)")
+    print("  SKIP_PHASE_5=true  (Summary)")
