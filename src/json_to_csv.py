@@ -8,8 +8,9 @@ Supports both CSV and SQLite output
 import os
 import csv
 import json
+import re
 import sqlite3
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
 
@@ -63,6 +64,244 @@ class JSONToCSVConverter:
         if not date_str:
             return ""
         return date_str
+
+    def _parse_land_info(self, asset_name: str, asset_type_id: int) -> Dict[str, Any]:
+        """
+        Parse land information from asset_name
+
+        Examples:
+        - "โฉนดที่ดิน เลขที่ 114172 ตำบลคลองต้น อำเภอพระโขนง กรุงเทพมหานคร"
+        - "น.ส.3 ก. เลขที่ 123 จังหวัดเชียงใหม่"
+
+        Returns dict with: land_type, land_number, area_rai, area_ngan, area_sqwa, province
+        """
+        land_info = {
+            "land_type": "",
+            "land_number": "",
+            "area_rai": "",
+            "area_ngan": "",
+            "area_sqwa": "",
+            "province": ""
+        }
+
+        if not asset_name:
+            return land_info
+
+        # Map asset_type_id to land_type
+        land_type_map = {
+            1: "โฉนด",
+            2: "น.ส.3 ก.",
+            3: "น.ส.3",
+            4: "ส.ป.ก."
+        }
+        land_info["land_type"] = land_type_map.get(asset_type_id, "")
+
+        # Extract land number - patterns like "เลขที่ 114172", "เลขที่โฉนด 123"
+        land_number_patterns = [
+            r'เลขที่(?:โฉนด)?\s*(\d+)',
+            r'เลขที่\s*(\d+)',
+            r'ที่ดิน\s*เลขที่\s*(\d+)',
+            r'โฉนด(?:ที่ดิน)?\s*(?:เลขที่)?\s*(\d+)'
+        ]
+        for pattern in land_number_patterns:
+            match = re.search(pattern, asset_name)
+            if match:
+                land_info["land_number"] = match.group(1)
+                break
+
+        # Extract area - patterns like "0 ไร่ 1 งาน 50 ตารางวา"
+        rai_match = re.search(r'(\d+(?:\.\d+)?)\s*ไร่', asset_name)
+        if rai_match:
+            land_info["area_rai"] = float(rai_match.group(1))
+
+        ngan_match = re.search(r'(\d+(?:\.\d+)?)\s*งาน', asset_name)
+        if ngan_match:
+            land_info["area_ngan"] = float(ngan_match.group(1))
+
+        sqwa_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:ตารางวา|ตร\.ว\.?|วา)', asset_name)
+        if sqwa_match:
+            land_info["area_sqwa"] = float(sqwa_match.group(1))
+
+        # Extract province - common patterns
+        province_patterns = [
+            r'จังหวัด(\S+)',
+            r'กรุงเทพ(?:มหานคร)?',
+            r'(\S+มหานคร)',
+            # Province at end of address
+            r'(?:อำเภอ|เขต)\S+\s+(\S+)$'
+        ]
+
+        # Try to find province
+        for pattern in province_patterns:
+            match = re.search(pattern, asset_name)
+            if match:
+                if 'กรุงเทพ' in pattern or 'กรุงเทพ' in match.group(0):
+                    land_info["province"] = "กรุงเทพมหานคร"
+                else:
+                    land_info["province"] = match.group(1) if match.lastindex else match.group(0)
+                break
+
+        # Additional check for Bangkok
+        if 'กรุงเทพ' in asset_name and not land_info["province"]:
+            land_info["province"] = "กรุงเทพมหานคร"
+
+        return land_info
+
+    def _parse_building_info(self, asset_name: str, asset_type_id: int) -> Dict[str, Any]:
+        """
+        Parse building information from asset_name
+
+        Examples:
+        - "บ้านเดี่ยว 3 ชั้น"
+        - "ห้องชุด เพนท์เฮ้าส์"
+        - "ทาวน์เฮ้าส์"
+        - "อาคารพาณิชย์ ตึกแถว"
+
+        Returns dict with: building_type, building_name, room_number, province
+        """
+        building_info = {
+            "building_type": "",
+            "building_name": "",
+            "room_number": "",
+            "province": ""
+        }
+
+        if not asset_name:
+            return building_info
+
+        # Map asset_type_id to building_type
+        building_type_map = {
+            10: "บ้านเดี่ยว",
+            11: "อาคารพาณิชย์",
+            13: "ห้องชุด",
+            37: "ทาวน์เฮ้าส์"
+        }
+        building_info["building_type"] = building_type_map.get(asset_type_id, "")
+
+        # Extract building name (typically the full description)
+        building_info["building_name"] = asset_name
+
+        # Extract room number - patterns like "ห้องเลขที่ 123", "เลขที่ห้อง 456"
+        room_patterns = [
+            r'ห้อง(?:เลขที่)?\s*(\S+)',
+            r'เลขที่(?:ห้อง)?\s*(\S+)',
+            r'ชั้น\s*(\d+)',
+            r'ยูนิต\s*(\S+)',
+            r'unit\s*(\S+)'
+        ]
+        for pattern in room_patterns:
+            match = re.search(pattern, asset_name, re.IGNORECASE)
+            if match:
+                building_info["room_number"] = match.group(1)
+                break
+
+        # Extract province
+        if 'กรุงเทพ' in asset_name:
+            building_info["province"] = "กรุงเทพมหานคร"
+        else:
+            province_match = re.search(r'จังหวัด(\S+)', asset_name)
+            if province_match:
+                building_info["province"] = province_match.group(1)
+
+        return building_info
+
+    def _parse_vehicle_info(self, asset_name: str, asset_type_id: int) -> Dict[str, Any]:
+        """
+        Parse vehicle information from asset_name
+
+        Examples:
+        - "รถยนต์ Mercedes Benz S400 Hybrid"
+        - "รถจักรยานยนต์ HONDA WAVE"
+        - "รถยนต์ Volkswagen Caravelle Minorchange 2 ปี 2019"
+
+        Returns dict with: vehicle_type, brand, model, registration, province
+        """
+        vehicle_info = {
+            "vehicle_type": "",
+            "brand": "",
+            "model": "",
+            "registration": "",
+            "province": ""
+        }
+
+        if not asset_name:
+            return vehicle_info
+
+        # Map asset_type_id to vehicle_type
+        vehicle_type_map = {
+            18: "รถยนต์",
+            19: "รถจักรยานยนต์",
+            20: "เรือ"
+        }
+        vehicle_info["vehicle_type"] = vehicle_type_map.get(asset_type_id, "")
+
+        # Common car brands for detection
+        car_brands = [
+            'Mercedes Benz', 'Mercedes-Benz', 'Mercedes', 'Benz',
+            'BMW', 'Audi', 'Lexus', 'Toyota', 'Honda', 'Nissan',
+            'Mazda', 'Ford', 'Chevrolet', 'Volkswagen', 'Porsche',
+            'Volvo', 'Hyundai', 'Kia', 'Mitsubishi', 'Suzuki',
+            'Subaru', 'Isuzu', 'MG', 'Mini', 'Jaguar', 'Land Rover',
+            'Range Rover', 'Ferrari', 'Lamborghini', 'Bentley', 'Rolls Royce',
+            'Tesla', 'BYD', 'GWM', 'ORA', 'NETA',
+            'HONDA', 'TOYOTA', 'YAMAHA', 'KAWASAKI', 'VESPA', 'Piaggio',
+            'Ducati', 'Harley Davidson', 'Triumph', 'KTM'
+        ]
+
+        # Find brand in asset_name
+        name_lower = asset_name.lower()
+        for brand in car_brands:
+            if brand.lower() in name_lower:
+                vehicle_info["brand"] = brand
+                # Try to extract model - text after brand
+                brand_idx = name_lower.find(brand.lower())
+                if brand_idx >= 0:
+                    after_brand = asset_name[brand_idx + len(brand):].strip()
+                    # Model is typically the first word/phrase after brand
+                    model_match = re.match(r'^[\s,]*([A-Za-z0-9\-]+(?:\s+[A-Za-z0-9\-]+)?)', after_brand)
+                    if model_match:
+                        vehicle_info["model"] = model_match.group(1).strip()
+                break
+
+        # If no brand found, try to extract from text patterns
+        if not vehicle_info["brand"]:
+            # Pattern for "รถยนต์ XXX" or "รถจักรยานยนต์ XXX"
+            vehicle_patterns = [
+                r'รถยนต์\s+(\S+)',
+                r'รถจักรยานยนต์\s+(\S+)',
+                r'เรือ\s+(\S+)'
+            ]
+            for pattern in vehicle_patterns:
+                match = re.search(pattern, asset_name)
+                if match:
+                    # First word after vehicle type could be brand
+                    potential_brand = match.group(1)
+                    if potential_brand and not potential_brand[0].isdigit():
+                        vehicle_info["brand"] = potential_brand
+                    break
+
+        # Extract registration number - Thai license plate patterns
+        # Patterns like "1กค5025", "กข 1234", "1-กก-1234"
+        registration_patterns = [
+            r'ทะเบียน\s*(\S+)',
+            r'หมายเลขทะเบียน\s*(\S+)',
+            r'เลขทะเบียน\s*(\S+)',
+            r'([0-9]*[ก-ฮ]{1,3}[\s\-]?[0-9]{1,4})',  # Thai license plate
+        ]
+        for pattern in registration_patterns:
+            match = re.search(pattern, asset_name)
+            if match:
+                vehicle_info["registration"] = match.group(1)
+                break
+
+        # Extract province for registration
+        province_match = re.search(r'จังหวัด(\S+)', asset_name)
+        if province_match:
+            vehicle_info["province"] = province_match.group(1)
+        elif 'กรุงเทพ' in asset_name:
+            vehicle_info["province"] = "กรุงเทพมหานคร"
+
+        return vehicle_info
 
     def load_input_data(self, input_dir: str):
         """
@@ -420,9 +659,15 @@ class JSONToCSVConverter:
                 "latest_submitted_date": today
             })
 
-            # Process land info
+            # Get asset_name for parsing
+            asset_name = self._safe_get(asset, "asset_name", "")
+
+            # Process land info - parse from asset_name if no nested object
             if asset_type_id in [1, 2, 3, 4]:
                 land_info = self._safe_get(asset, "land_info", {})
+                # If land_info is empty or has no land_number, parse from asset_name
+                if not land_info or not land_info.get("land_number"):
+                    land_info = self._parse_land_info(asset_name, asset_type_id)
                 self.asset_land_infos.append({
                     "asset_id": asset_id,
                     "nacc_id": nacc_id,
@@ -435,9 +680,12 @@ class JSONToCSVConverter:
                     "latest_submitted_date": today
                 })
 
-            # Process building info
+            # Process building info - parse from asset_name if no nested object
             if asset_type_id in [10, 11, 13, 37]:
                 building_info = self._safe_get(asset, "building_info", {})
+                # If building_info is empty, parse from asset_name
+                if not building_info or not building_info.get("building_type"):
+                    building_info = self._parse_building_info(asset_name, asset_type_id)
                 self.asset_building_infos.append({
                     "asset_id": asset_id,
                     "nacc_id": nacc_id,
@@ -448,9 +696,12 @@ class JSONToCSVConverter:
                     "latest_submitted_date": today
                 })
 
-            # Process vehicle info
+            # Process vehicle info - parse from asset_name if no nested object
             if asset_type_id in [18, 19, 20]:
                 vehicle_info = self._safe_get(asset, "vehicle_info", {})
+                # If vehicle_info is empty, parse from asset_name
+                if not vehicle_info or not vehicle_info.get("brand"):
+                    vehicle_info = self._parse_vehicle_info(asset_name, asset_type_id)
                 self.asset_vehicle_infos.append({
                     "asset_id": asset_id,
                     "nacc_id": nacc_id,
