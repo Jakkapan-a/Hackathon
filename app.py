@@ -109,11 +109,32 @@ if __name__ == "__main__":
         OCR_METHOD = os.getenv("OCR_METHOD", "ollama")  # default to ollama
 
         if OCR_METHOD == "api":
-            from src.extract_text_from_image import extract_text_from_image as ocr_function
+            from src.extract_text_from_image import extract_text_from_image as _ocr_function
             print("Using OpenTyphoon API for OCR")
         else:
-            from src.extract_text_from_image_ollama_v2 import extract_text_from_image_ollama as ocr_function
+            from src.extract_text_from_image_ollama_v2 import extract_text_from_image_ollama as _ocr_function
             print("Using Ollama for OCR")
+
+        # Wrapper with retry logic for OCR
+        def ocr_function(image_path, max_retries=5):
+            """OCR with retry on rate limit or transient errors"""
+            for attempt in range(max_retries):
+                try:
+                    return _ocr_function(image_path)
+                except Exception as e:
+                    error_str = str(e).lower()
+                    # Check for rate limit or transient errors
+                    if "rate limit" in error_str or "429" in error_str or "timeout" in error_str:
+                        if attempt < max_retries - 1:
+                            wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s, 8s, 16s
+                            print(f"    ⚠ OCR rate limit/error, waiting {wait_time}s before retry ({attempt + 1}/{max_retries})...")
+                            time.sleep(wait_time)
+                        else:
+                            raise e
+                    else:
+                        # Non-retryable error
+                        raise e
+            return None
 
         for doc_info in data['doc_info']:
             print(f"Processing OCR for Document ID: {doc_info['doc_id']}")
@@ -147,6 +168,7 @@ if __name__ == "__main__":
                             continue
 
                         ocr_result = ocr_function(image_path)
+                        
                         if ocr_result:
 
                             # Create output .txt file with same name as image

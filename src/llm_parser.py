@@ -11,9 +11,9 @@ Supports two parsing modes:
 import os
 import json
 import re
+import time
 from typing import List, Dict, Any, Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -54,6 +54,58 @@ class LLMParser:
 - ปี พ.ศ. ให้เก็บเป็น พ.ศ. (เช่น 2566)
 - owner_by_* ให้เป็น boolean (true/false)
 - ตอบเป็น JSON เท่านั้น ไม่ต้องมีคำอธิบายอื่น
+
+=== กฎแก้ไขข้อผิดพลาด OCR (สำคัญมาก!) ===
+OCR มักอ่านภาษาไทยผิดพลาด คุณต้องแก้ไขอัตโนมัติ:
+
+1. คำนำหน้าชื่อ (Title):
+   - "นายสาว" → แก้เป็น "นางสาว" (ไม่มีคำว่า "นายสาว" ในภาษาไทย)
+   - "นายสาว" + ชื่อ → title="นางสาว", first_name=ชื่อ (ไม่ใช่ title="นาย", first_name="สาว"+ชื่อ)
+   - "นายง" หรือ "นาย ง" → แก้เป็น "นาง"
+   - "น.ส." หรือ "น.ส" → แก้เป็น "นางสาว"
+   - คำนำหน้าที่ถูกต้องมีเฉพาะ: นาย, นาง, นางสาว, เด็กชาย, เด็กหญิง, พลเอก, พลโท, พลตรี, พลเรือเอก, พลเรือโท, พลเรือตรี, พลอากาศเอก, พลอากาศโท, พลอากาศตรี, ร้อยตำรวจเอก, พันตำรวจเอก, ศาสตราจารย์, รองศาสตราจารย์, ผู้ช่วยศาสตราจารย์, ดร., นายแพทย์, แพทย์หญิง, ทันตแพทย์, เภสัชกร, Mr., Mrs., Miss, Ms.
+
+2. ตัวอักษรคล้ายกัน (Character confusion):
+   - "ค" กับ "ด" มักสับสน: ถ้าเจอนามสกุลที่ขึ้นต้นด้วย "ค่าน" หรือ "คาน" → พิจารณาว่าอาจเป็น "ด่าน" หรือ "ดาน"
+   - "ง" กับ "ย" มักสับสน: "นายสาว" → "นางสาว"
+   - "ก" กับ "ถ" มักสับสน
+   - "บ" กับ "ป" มักสับสน
+   - "พ" กับ "ฟ" มักสับสน
+   - "ม" กับ "น" มักสับสน
+   - "ล" กับ "ส" มักสับสน
+
+3. การตรวจสอบความสมเหตุสมผล:
+   - ชื่อคนไทยไม่ควรขึ้นต้นด้วย "สาว" (ถ้าพบ "สาว" นำหน้าชื่อ → อาจเป็น "นางสาว" ที่ถูกแยกผิด)
+   - นามสกุลผู้ยื่นและคู่สมรสมักเหมือนกัน (ถ้าต่างกันเล็กน้อย อาจเป็น OCR error)
+   - ถ้าเห็นชื่อในชื่อไฟล์ PDF หรือ doc_id ให้ใช้เป็น reference
+
+4. ตัวอย่างการแก้ไข:
+   - OCR: "นายสาวณิธิชา กิตติสิริภัทรา" → แก้เป็น title="นางสาว", first_name="ณิธิชา"
+   - OCR: "นางนลินี ค่านชัยวิจิตร" แต่ผู้ยื่นชื่อ "ด่านชัยวิจิตร" → แก้เป็น last_name="ด่านชัยวิจิตร"
+   - OCR: "นายง สมศรี" → แก้เป็น title="นาง", first_name="สมศรี"
+
+=== กฎการอ่านตัวเลขและ Markdown ===
+OCR อาจออกมาในรูปแบบ HTML/Markdown คุณต้องแปลงให้ถูกต้อง:
+
+1. ตัวเลขเงิน:
+   - "100,000.00" → แปลงเป็น 100000.0 (ลบ comma ออก)
+   - "1,234,567.89" → แปลงเป็น 1234567.89
+   - "-" หรือ "" หรือ "ไม่มี" → แปลงเป็น null หรือ 0 แล้วแต่บริบท
+   - ตัวเลขติดลบ "-500,000" → แปลงเป็น -500000.0
+
+2. HTML Table:
+   - ข้อมูลใน <table><tr><td>...</td></tr></table> ให้แยกข้อมูลจากแต่ละ cell
+   - Header row มักเป็น: ผู้ยื่นบัญชี | คู่สมรส | บุตรที่ยังไม่บรรลุนิติภาวะ
+   - ให้ map ค่าตัวเลขเข้ากับ column ที่ถูกต้อง
+
+3. Markdown formatting:
+   - **bold text** → อ่านเป็นข้อความปกติ
+   - `2\.` หรือ `1\.` → อ่านเป็น "2." หรือ "1." (escape character)
+   - <figure>...</figure> → ข้ามไป (เป็นรูปภาพ)
+
+4. ตัวอย่าง:
+   - "<td>100,000.00</td><td>50,000.00</td><td>-</td>"
+     → valuation_submitter=100000.0, valuation_spouse=50000.0, valuation_child=0 หรือ null
 
 Enum References:
 - relationship_id: 1=บิดา, 2=มารดา, 3=พี่น้อง, 4=บุตร, 5=บิดาคู่สมรส, 6=มารดาคู่สมรส
@@ -254,19 +306,38 @@ NACC ID: {nacc_id}
 
         raise ValueError(f"Could not extract valid JSON from response: {response_text[:500]}...")
 
-    def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
-        """Call OpenAI API"""
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=self.temperature,
-            max_tokens=16000,
-            response_format={"type": "json_object"}
-        )
-        return response.choices[0].message.content
+    def _call_llm(self, system_prompt: str, user_prompt: str, max_retries: int = 10) -> str:
+        """Call OpenAI API with retry on rate limit
+
+        Args:
+            system_prompt: System prompt for LLM
+            user_prompt: User prompt with OCR text
+            max_retries: Maximum number of retries on rate limit error
+
+        Returns:
+            LLM response text
+        """
+        for attempt in range(max_retries):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=self.temperature,
+                    max_tokens=16000,
+                    response_format={"type": "json_object"}
+                )
+                return response.choices[0].message.content
+            except RateLimitError as e:
+                if attempt < max_retries - 1:
+                    # Exponential backoff: 1s, 2s, 4s, 8s, 16s
+                    wait_time = 2 ** attempt
+                    print(f"    ⚠ Rate limit hit, waiting {wait_time}s before retry ({attempt + 1}/{max_retries})...")
+                    time.sleep(wait_time)
+                else:
+                    raise e
 
     def parse_document(self, ocr_texts: List[str], doc_id: str, nacc_id: int) -> Dict[str, Any]:
         """
@@ -356,6 +427,57 @@ NACC ID: {nacc_id}
   * บิดา/มารดาของผู้ยื่น (relatives relationship_id=1,2)
   * บิดา/มารดาของคู่สมรส (relatives relationship_id=5,6)
   * บุตร (relatives relationship_id=4)
+
+=== กฎแก้ไขข้อผิดพลาด OCR (สำคัญมาก!) ===
+OCR มักอ่านภาษาไทยผิดพลาด คุณต้องแก้ไขอัตโนมัติ:
+
+1. คำนำหน้าชื่อ (Title) - ต้องแก้ไขเสมอ:
+   - "นายสาว" → แก้เป็น "นางสาว" (ไม่มีคำว่า "นายสาว" ในภาษาไทย!)
+   - "นายสาว" + ชื่อ → title="นางสาว", first_name=ชื่อ (ไม่ใช่ title="นาย", first_name="สาว"+ชื่อ)
+   - "นายง" หรือ "นาย ง" → แก้เป็น "นาง"
+   - "น.ส." → แก้เป็น "นางสาว"
+   - คำนำหน้าที่ถูกต้อง: นาย, นาง, นางสาว, เด็กชาย, เด็กหญิง, พลเอก, พลโท, พลตรี, พลเรือเอก, พลเรือโท, พลเรือตรี, พลอากาศเอก, พลอากาศโท, พลอากาศตรี, ร้อยตำรวจเอก, พันตำรวจเอก, ศาสตราจารย์, รองศาสตราจารย์, ผู้ช่วยศาสตราจารย์, ดร., นายแพทย์, แพทย์หญิง, Mr., Mrs., Miss, Ms.
+
+2. ตัวอักษรคล้ายกันที่ OCR มักอ่านผิด:
+   - "ค" กับ "ด" สับสน: "ค่าน" → อาจเป็น "ด่าน"
+   - "ง" กับ "ย" สับสน: "นายสาว" → "นางสาว"
+   - "ก" กับ "ถ" สับสน
+   - "บ" กับ "ป" สับสน
+   - "พ" กับ "ฟ" สับสน
+   - "ม" กับ "น" สับสน
+   - "ล" กับ "ส" สับสน
+
+3. การตรวจสอบความสมเหตุสมผล:
+   - ชื่อคนไทยไม่ควรขึ้นต้นด้วย "สาว" → ถ้าพบ "สาว" นำหน้าชื่อ อาจเป็น "นางสาว" ที่ถูกแยกผิด
+   - นามสกุลผู้ยื่นและคู่สมรสมักเหมือนกัน → ถ้าต่างกันเล็กน้อย อาจเป็น OCR error
+
+4. ตัวอย่างการแก้ไข:
+   - "นายสาวณิธิชา" → title="นางสาว", first_name="ณิธิชา"
+   - "นางนลินี ค่านชัยวิจิตร" (แต่ผู้ยื่นชื่อ "ด่านชัยวิจิตร") → last_name="ด่านชัยวิจิตร"
+   - "นายง สมศรี" → title="นาง", first_name="สมศรี"
+
+=== กฎการอ่านตัวเลขและ Markdown ===
+OCR อาจออกมาในรูปแบบ HTML/Markdown คุณต้องแปลงให้ถูกต้อง:
+
+1. ตัวเลขเงิน:
+   - "100,000.00" → แปลงเป็น 100000.0 (ลบ comma ออก)
+   - "1,234,567.89" → แปลงเป็น 1234567.89
+   - "-" หรือ "" หรือ "ไม่มี" → แปลงเป็น null หรือ 0 แล้วแต่บริบท
+   - ตัวเลขติดลบ "-500,000" → แปลงเป็น -500000.0
+
+2. HTML Table:
+   - ข้อมูลใน <table><tr><td>...</td></tr></table> ให้แยกข้อมูลจากแต่ละ cell
+   - Header row มักเป็น: ผู้ยื่นบัญชี | คู่สมรส | บุตรที่ยังไม่บรรลุนิติภาวะ
+   - ให้ map ค่าตัวเลขเข้ากับ column ที่ถูกต้อง (valuation_submitter, valuation_spouse, valuation_child)
+
+3. Markdown formatting:
+   - **bold text** → อ่านเป็นข้อความปกติ
+   - `2\.` หรือ `1\.` → อ่านเป็น "2." หรือ "1." (escape character)
+   - <figure>...</figure> → ข้ามไป (เป็นรูปภาพ)
+
+4. ตัวอย่าง:
+   - "<td>100,000.00</td><td>50,000.00</td><td>-</td>"
+     → valuation_submitter=100000.0, valuation_spouse=50000.0, valuation_child=0 หรือ null
 
 Enum References:
 - relationship_id: 1=บิดา, 2=มารดา, 3=พี่น้อง, 4=บุตร, 5=บิดาคู่สมรส, 6=มารดาคู่สมรส
@@ -615,42 +737,40 @@ Enum References:
         ocr_texts: List[str],
         doc_id: str,
         nacc_id: int,
-        max_workers: int = 5
+        delay_between_pages: float = 1.0
     ) -> Dict[str, Any]:
         """
-        Parse document by processing each page separately then merging
+        Parse document by processing each page sequentially then merging
 
         Args:
             ocr_texts: List of OCR text from each page
             doc_id: Document ID
             nacc_id: NACC ID
-            max_workers: Number of parallel workers for API calls
+            delay_between_pages: Delay in seconds between API calls to avoid rate limit
 
         Returns:
             Merged structured data
         """
         total_pages = len(ocr_texts)
-        page_results = [None] * total_pages
+        page_results = []
 
-        print(f"  Parsing {total_pages} pages (page-by-page mode)...")
+        print(f"  Parsing {total_pages} pages (sequential mode, delay={delay_between_pages}s)...")
 
-        # Parse pages in parallel
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_page = {
-                executor.submit(self.parse_single_page, text, i + 1, total_pages): i
-                for i, text in enumerate(ocr_texts)
-            }
+        # Parse pages sequentially to avoid rate limit
+        for i, ocr_text in enumerate(ocr_texts):
+            page_num = i + 1
+            try:
+                result = self.parse_single_page(ocr_text, page_num, total_pages)
+                page_results.append(result)
+                page_type = result.get("page_type", "unknown")
+                print(f"  ✓ Page {page_num}/{total_pages}: {page_type}")
+            except Exception as e:
+                print(f"  ✗ Page {page_num}/{total_pages}: Error - {e}")
+                page_results.append({"page_number": page_num, "error": str(e)})
 
-            for future in as_completed(future_to_page):
-                page_idx = future_to_page[future]
-                try:
-                    result = future.result()
-                    page_results[page_idx] = result
-                    page_type = result.get("page_type", "unknown")
-                    print(f"  ✓ Page {page_idx + 1}/{total_pages}: {page_type}")
-                except Exception as e:
-                    print(f"  ✗ Page {page_idx + 1}/{total_pages}: Error - {e}")
-                    page_results[page_idx] = {"page_number": page_idx + 1, "error": str(e)}
+            # Delay between pages to avoid rate limit (except for last page)
+            if i < total_pages - 1:
+                time.sleep(delay_between_pages)
 
         # Merge all pages
         print(f"  Merging {total_pages} pages...")
