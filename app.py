@@ -15,6 +15,11 @@ INPUT_BASE_DIR = os.getenv("INPUT_BASE_DIR", "./test phase 1/test phase 1 input"
 PDF_FOLDER = os.getenv("PDF_FOLDER", "Test_pdf/pdf")
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./test phase 1/test phase 1 output")
 
+# ================ Input CSV File Names ================
+INPUT_CSV_DOC_INFO = os.getenv("INPUT_CSV_DOC_INFO", "Test_doc_info.csv")
+INPUT_CSV_NACC_DETAIL = os.getenv("INPUT_CSV_NACC_DETAIL", "Test_nacc_detail.csv")
+INPUT_CSV_SUBMITTER = os.getenv("INPUT_CSV_SUBMITTER", "Test_submitter.csv")
+
 # Construct full PDF path
 PDF_DIR = os.path.join(INPUT_BASE_DIR, PDF_FOLDER)
 
@@ -45,10 +50,18 @@ if __name__ == "__main__":
     print(f"SKIP_PHASE_5: {SKIP_PHASE_5}")
     print(f"LLM_PARSE_MODE: {LLM_PARSE_MODE}")
     print(f"LLM_MAX_WORKERS: {LLM_MAX_WORKERS}")
+    print(f"INPUT_CSV_DOC_INFO: {INPUT_CSV_DOC_INFO}")
+    print(f"INPUT_CSV_NACC_DETAIL: {INPUT_CSV_NACC_DETAIL}")
+    print(f"INPUT_CSV_SUBMITTER: {INPUT_CSV_SUBMITTER}")
     print("=================================================\n")
 
     # Load File doc info
-    data = load_test_phase_csvs(base_dir=INPUT_BASE_DIR)
+    data = load_test_phase_csvs(
+        base_dir=INPUT_BASE_DIR,
+        csv_doc_info=INPUT_CSV_DOC_INFO,
+        csv_nacc_detail=INPUT_CSV_NACC_DETAIL,
+        csv_submitter=INPUT_CSV_SUBMITTER
+    )
     print(f"Loaded {len(data['doc_info'])} document info records.")
 
     # =================== Phase 1: PDF to Image ===================
