@@ -38,6 +38,7 @@ SKIP_PHASE_5 = os.getenv("SKIP_PHASE_5", "false").lower() == "true"  # Summary G
 # LLM parsing mode: "combined" (all pages at once) or "page_by_page" (parse each page then merge)
 LLM_PARSE_MODE = os.getenv("LLM_PARSE_MODE", "page_by_page")
 LLM_MAX_WORKERS = int(os.getenv("LLM_MAX_WORKERS", "5"))  # Parallel workers for page-by-page mode
+LLM_PARALLEL_DOCS = int(os.getenv("LLM_PARALLEL_DOCS", "1"))  # Number of documents to process in parallel
 
 if __name__ == "__main__":
     # Print configuration
@@ -217,20 +218,19 @@ if __name__ == "__main__":
         # Initialize LLM Parser
         LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4.1-mini")
         print(f"Using LLM Model: {LLM_MODEL}")
+        print(f"Parallel Documents: {LLM_PARALLEL_DOCS}")
 
         parser = LLMParser(model=LLM_MODEL, temperature=0.1)
 
         # Create output directory
         os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-        # Process each document
-        for doc_info in data['doc_info']:
+        def process_single_document(doc_info):
+            """Process a single document - used for parallel processing"""
             doc_id = str(doc_info['doc_id'])
             nacc_id = int(doc_info['nacc_id'])
             fileName = doc_info['doc_location_url']
             file_base_name = os.path.splitext(fileName)[0]
-
-            print(f"\n--- Processing Document: {doc_id} (NACC: {nacc_id}) ---")
 
             # Get images folder path (where txt files are stored)
             images_folder = os.path.join(PDF_DIR, f"{file_base_name}_output", "images")
@@ -238,24 +238,18 @@ if __name__ == "__main__":
             # Check if JSON output already exists
             json_output_path = os.path.join(OUTPUT_DIR, f"{file_base_name}.json")
             if os.path.exists(json_output_path):
-                print(f"[OK] JSON output already exists, skipping: {json_output_path}")
-                continue
+                return {"status": "skipped", "doc_id": doc_id, "message": "JSON already exists"}
 
             # Check if OCR txt files exist
             if not os.path.exists(images_folder):
-                print(f"[ERR] Images folder not found: {images_folder}")
-                continue
+                return {"status": "error", "doc_id": doc_id, "message": f"Images folder not found: {images_folder}"}
 
             txt_files = sorted([f for f in os.listdir(images_folder) if f.endswith('.txt')])
             if not txt_files:
-                print(f"[ERR] No OCR txt files found in: {images_folder}")
-                continue
-
-            print(f"Found {len(txt_files)} OCR text files")
+                return {"status": "error", "doc_id": doc_id, "message": "No OCR txt files found"}
 
             # Parse document using LLM
             try:
-                print(f"Calling LLM to parse document...")
                 timeStart = time.time()
 
                 # Use v2 parser with configurable mode
@@ -266,21 +260,70 @@ if __name__ == "__main__":
                 )
 
                 elapsed = time.time() - timeStart
-                print(f"[OK] LLM parsing completed in {elapsed:.2f} seconds")
-                print(f"  Status: {parsed_data.get('extraction_status', 'unknown')}")
-                print(f"  Confidence: {parsed_data.get('confidence_score', 0):.2f}")
 
                 # Save JSON output
-                json_output_path = os.path.join(OUTPUT_DIR, f"{file_base_name}.json")
                 with open(json_output_path, 'w', encoding='utf-8') as f:
                     json.dump(parsed_data, f, ensure_ascii=False, indent=2)
-                print(f"[OK] Saved JSON to: {json_output_path}")
+
+                return {
+                    "status": "success",
+                    "doc_id": doc_id,
+                    "nacc_id": nacc_id,
+                    "elapsed": elapsed,
+                    "extraction_status": parsed_data.get('extraction_status', 'unknown'),
+                    "confidence": parsed_data.get('confidence_score', 0),
+                    "txt_files": len(txt_files)
+                }
 
             except Exception as e:
-                print(f"[ERR] Error parsing document {doc_id}: {e}")
                 import traceback
-                traceback.print_exc()
-                continue
+                return {"status": "error", "doc_id": doc_id, "message": str(e), "traceback": traceback.format_exc()}
+
+        # Process documents - either sequentially or in parallel
+        if LLM_PARALLEL_DOCS <= 1:
+            # Sequential processing (original behavior)
+            for doc_info in data['doc_info']:
+                doc_id = str(doc_info['doc_id'])
+                nacc_id = int(doc_info['nacc_id'])
+                print(f"\n--- Processing Document: {doc_id} (NACC: {nacc_id}) ---")
+
+                result = process_single_document(doc_info)
+
+                if result["status"] == "skipped":
+                    print(f"[OK] {result['message']}")
+                elif result["status"] == "error":
+                    print(f"[ERR] {result['message']}")
+                    if "traceback" in result:
+                        print(result["traceback"])
+                else:
+                    print(f"[OK] LLM parsing completed in {result['elapsed']:.2f} seconds")
+                    print(f"  Status: {result['extraction_status']}")
+                    print(f"  Confidence: {result['confidence']:.2f}")
+        else:
+            # Parallel processing
+            print(f"\n--- Processing {len(data['doc_info'])} documents in parallel (max {LLM_PARALLEL_DOCS} at a time) ---")
+
+            with ThreadPoolExecutor(max_workers=LLM_PARALLEL_DOCS) as executor:
+                # Submit all tasks
+                future_to_doc = {executor.submit(process_single_document, doc_info): doc_info for doc_info in data['doc_info']}
+
+                # Process completed tasks as they finish
+                for future in as_completed(future_to_doc):
+                    doc_info = future_to_doc[future]
+                    doc_id = str(doc_info['doc_id'])
+                    nacc_id = int(doc_info['nacc_id'])
+
+                    try:
+                        result = future.result()
+
+                        if result["status"] == "skipped":
+                            print(f"[SKIP] Doc {doc_id}: {result['message']}")
+                        elif result["status"] == "error":
+                            print(f"[ERR] Doc {doc_id}: {result['message']}")
+                        else:
+                            print(f"[OK] Doc {doc_id} (NACC: {nacc_id}): {result['elapsed']:.2f}s, Status: {result['extraction_status']}, Conf: {result['confidence']:.2f}")
+                    except Exception as e:
+                        print(f"[ERR] Doc {doc_id}: Exception - {e}")
 
     # =================== Phase 4: JSON to CSV/Database ===================
     print("\n=================== Phase 4: JSON to CSV/Database ===================")

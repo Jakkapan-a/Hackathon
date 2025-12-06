@@ -391,7 +391,3 @@ python src/json_to_csv.py
 2. หรือใช้ Notepad++ แล้วเลือก Encoding > UTF-8
 
 ---
-
-## ลิขสิทธิ์
-
-MIT License

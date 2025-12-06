@@ -569,9 +569,19 @@ class JSONToCSVConverter:
                     with open(json_path, 'r', encoding='utf-8') as f:
                         parsed_data = json.load(f)
 
-                    # Process with doc_id and nacc_id from doc_info.csv (NOT from JSON file)
+                    # Get submitter_id from nacc_detail (use the correct ID from input data)
+                    nacc_detail = self.input_nacc_detail.get(str(nacc_id), {})
+                    input_submitter_id = nacc_detail.get('submitter_id', '')
+                    # Convert to int if possible
+                    try:
+                        submitter_id_value = int(input_submitter_id) if input_submitter_id else None
+                    except (ValueError, TypeError):
+                        submitter_id_value = None
+
+                    # Process with doc_id, nacc_id, and submitter_id from input CSVs
                     self.process_document(
                         parsed_data,
+                        submitter_id=submitter_id_value,
                         override_doc_id=str(doc_id),
                         override_nacc_id=nacc_id
                     )
@@ -840,20 +850,131 @@ class JSONToCSVConverter:
             })
 
     def _process_statements(self, data: Dict, submitter_id: int, nacc_id: int):
-        """Process statement data"""
-        statements = data.get("statements", [])
+        """
+        Process statement data - generates 5 summary rows (type_id 1-5)
+
+        Statement Types:
+        1 = รายได้รวม (Total Income)
+        2 = รายจ่ายรวม (Total Expenses)
+        3 = ภาษี (Tax)
+        4 = ทรัพย์สินรวม (Total Assets)
+        5 = หนี้สินรวม (Total Liabilities)
+
+        The JSON statements array often contains asset category values with wrong type_ids.
+        We need to:
+        - Sum asset categories (type_id 1-4, 22, 24, 25, 28, 31, 33, 39) → total assets (type 4)
+        - Sum liability items (type_id 5) → total liabilities (type 5)
+        - Calculate income/expense from statement_details
+        """
         today = datetime.now().strftime("%Y-%m-%d")
 
-        for stmt in statements:
+        # Initialize totals for each statement type
+        totals = {
+            1: {"submitter": 0.0, "spouse": 0.0, "child": 0.0},  # Income
+            2: {"submitter": 0.0, "spouse": 0.0, "child": 0.0},  # Expenses
+            3: {"submitter": 0.0, "spouse": 0.0, "child": 0.0},  # Tax
+            4: {"submitter": 0.0, "spouse": 0.0, "child": 0.0},  # Assets
+            5: {"submitter": 0.0, "spouse": 0.0, "child": 0.0},  # Liabilities
+        }
+
+        # Asset category type_ids from JSON statements array (these should sum to total assets)
+        # Based on schema: 1-4=land, 10-13=building, 18-20=vehicle, 22=insurance, 24=membership,
+        # 25=fund, 28-33=valuables, 37=townhouse, 39=other
+        asset_type_ids = {1, 2, 3, 4, 10, 11, 13, 18, 19, 20, 22, 24, 25, 28, 29, 30, 31, 32, 33, 37, 39}
+        # Liability type_ids in JSON statements
+        liability_type_ids = {5}  # Statement type 5 in JSON is sometimes correct
+
+        # Process existing statements from JSON
+        # Sum asset categories to get total assets, keep liability as is
+        existing_statements = data.get("statements", [])
+        for stmt in existing_statements:
+            type_id = stmt.get("statement_type_id")
+            val_sub = self._safe_float(stmt.get("valuation_submitter", 0))
+            val_spouse = self._safe_float(stmt.get("valuation_spouse", 0))
+            val_child = self._safe_float(stmt.get("valuation_child", 0))
+
+            if type_id in asset_type_ids:
+                # This is an asset category - sum to total assets
+                totals[4]["submitter"] += val_sub
+                totals[4]["spouse"] += val_spouse
+                totals[4]["child"] += val_child
+            elif type_id == 5:
+                # Type 5 is liabilities - use directly
+                totals[5]["submitter"] += val_sub
+                totals[5]["spouse"] += val_spouse
+                totals[5]["child"] += val_child
+
+        # Calculate income and expenses from statement_details
+        statement_details = data.get("statement_details", [])
+        for detail in statement_details:
+            detail_type_id = detail.get("statement_detail_type_id")
+            val_sub = self._safe_float(detail.get("valuation_submitter", 0))
+            val_spouse = self._safe_float(detail.get("valuation_spouse", 0))
+            val_child = self._safe_float(detail.get("valuation_child", 0))
+            detail_text = (detail.get("detail") or "").lower()
+
+            # Determine category from detail_type_id or text
+            if detail_type_id in [1, 2, 3, 4, 5]:  # StatementDetailType: income types
+                totals[1]["submitter"] += val_sub
+                totals[1]["spouse"] += val_spouse
+                totals[1]["child"] += val_child
+            elif detail_type_id in [6, 7]:  # StatementDetailType: expense types
+                totals[2]["submitter"] += val_sub
+                totals[2]["spouse"] += val_spouse
+                totals[2]["child"] += val_child
+            elif detail_type_id in [17, 18, 19, 20]:  # StatementDetailType: liability types
+                # Add to liabilities if not already counted
+                if totals[5]["submitter"] == 0 and totals[5]["spouse"] == 0:
+                    totals[5]["submitter"] += val_sub
+                    totals[5]["spouse"] += val_spouse
+                    totals[5]["child"] += val_child
+            elif detail_type_id is None:
+                # Determine from text
+                if "รายได้" in detail_text and "รายจ่าย" not in detail_text:
+                    totals[1]["submitter"] += val_sub
+                    totals[1]["spouse"] += val_spouse
+                    totals[1]["child"] += val_child
+                elif "รายจ่าย" in detail_text:
+                    totals[2]["submitter"] += val_sub
+                    totals[2]["spouse"] += val_spouse
+                    totals[2]["child"] += val_child
+                elif "ภาษี" in detail_text:
+                    totals[3]["submitter"] += val_sub
+                    totals[3]["spouse"] += val_spouse
+                    totals[3]["child"] += val_child
+
+        # Fallback: Calculate asset totals from assets array if statements didn't have them
+        if totals[4]["submitter"] == 0 and totals[4]["spouse"] == 0 and totals[4]["child"] == 0:
+            assets = data.get("assets", [])
+            for asset in assets:
+                valuation = self._safe_float(asset.get("valuation", 0))
+                if asset.get("owner_by_submitter"):
+                    totals[4]["submitter"] += valuation
+                if asset.get("owner_by_spouse"):
+                    totals[4]["spouse"] += valuation
+                if asset.get("owner_by_child"):
+                    totals[4]["child"] += valuation
+
+        # Generate 5 statement rows (type_id 1-5)
+        for type_id in [1, 2, 3, 4, 5]:
             self.statements.append({
                 "nacc_id": nacc_id,
-                "statement_type_id": self._safe_get(stmt, "statement_type_id", ""),
-                "valuation_submitter": self._safe_get(stmt, "valuation_submitter", ""),
+                "statement_type_id": type_id,
+                "valuation_submitter": totals[type_id]["submitter"] if totals[type_id]["submitter"] > 0 else "",
                 "submitter_id": submitter_id,
-                "valuation_spouse": self._safe_get(stmt, "valuation_spouse", ""),
-                "valuation_child": self._safe_get(stmt, "valuation_child", ""),
+                "valuation_spouse": totals[type_id]["spouse"] if totals[type_id]["spouse"] > 0 else "",
+                "valuation_child": totals[type_id]["child"] if totals[type_id]["child"] > 0 else "",
                 "latest_submitted_date": today
             })
+
+    def _safe_float(self, value) -> float:
+        """Safely convert value to float"""
+        if value is None:
+            return 0.0
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return 0.0
 
     def _dedupe_statement_details(self, details: List[Dict]) -> List[Dict]:
         """Remove duplicate statement_details based on type_id and detail name"""
@@ -1060,13 +1181,13 @@ class JSONToCSVConverter:
         # Get submitter_info from input file
         submitter_input = self.input_submitter_info.get(input_submitter_id, {})
 
-        # Helper function to get value with fallback
+        # Helper function to get value with fallback (NONE for missing values - match training summary format)
         def get_value(val, fallback="NONE"):
-            return val if val and val.strip() else fallback
+            return val if val and str(val).strip() else fallback
 
         # Helper function to format date
         def format_date(val):
-            return self._format_date(val) if val and val.strip() else "NONE"
+            return self._format_date(val) if val and str(val).strip() else "NONE"
 
         self.summaries.append({
             # ID columns - from nacc_detail
@@ -1141,8 +1262,16 @@ class JSONToCSVConverter:
             "relative_has_death_flag": has_death_flag
         })
 
-    def _write_csv(self, filename: str, data: List[Dict], fieldnames: List[str]):
-        """Write data to CSV file"""
+    def _write_csv(self, filename: str, data: List[Dict], fieldnames: List[str], use_none_for_empty: bool = False):
+        """Write data to CSV file
+
+        Args:
+            filename: Output filename
+            data: List of row dictionaries
+            fieldnames: List of column names
+            use_none_for_empty: If True, use 'NONE' for empty values (for summary);
+                               If False, use empty string (for statement, asset, etc.)
+        """
         if not data:
             return
 
@@ -1159,9 +1288,9 @@ class JSONToCSVConverter:
                     # Convert float to int if it's a whole number (remove .0)
                     if isinstance(v, float) and v == int(v):
                         filtered_row[k] = int(v)
-                    # Convert empty string to NONE for consistency
+                    # Handle empty values based on file type
                     elif v == '' or v is None:
-                        filtered_row[k] = 'NONE'
+                        filtered_row[k] = 'NONE' if use_none_for_empty else ''
                     else:
                         filtered_row[k] = v
                 writer.writerow(filtered_row)
@@ -1270,7 +1399,7 @@ class JSONToCSVConverter:
             doc_order_map = {doc_id: idx for idx, doc_id in enumerate(self.input_doc_order)}
             self.summaries.sort(key=lambda x: doc_order_map.get(str(x.get('doc_id', '')), 999999))
 
-        # Summary - matching training data format
+        # Summary - matching training data format (use NONE for empty values)
         self._write_csv(f"{output_prefix}_summary.csv", self.summaries, [
             "id", "doc_id", "nd_title", "nd_first_name", "nd_last_name", "nd_position",
             "submitted_date", "disclosure_announcement_date", "disclosure_start_date",
@@ -1291,7 +1420,7 @@ class JSONToCSVConverter:
             "asset_other_asset_valuation_amount", "asset_valuation_submitter_amount",
             "asset_valuation_spouse_amount", "asset_valuation_child_amount",
             "relative_count", "relative_has_death_flag"
-        ])
+        ], use_none_for_empty=True)
 
     def save_json(self, parsed_data: Dict[str, Any], filename: str):
         """Save parsed data as JSON file"""
