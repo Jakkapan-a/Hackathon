@@ -71,7 +71,7 @@ if __name__ == "__main__":
     # =================== Phase 1: PDF to Image ===================
     print("\n=================== Phase 1: PDF to Image ===================")
     if SKIP_PHASE_1:
-        print("⏭️  Phase 1 SKIPPED (SKIP_PHASE_1=true)")
+        print("[SKIP] Phase 1 SKIPPED (SKIP_PHASE_1=true)")
     else:
         for doc_info in data['doc_info']:
             print(f"{doc_info['doc_id']}, {doc_info['doc_location_url']}, {doc_info['type_id']}, {doc_info['nacc_id']}")
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     # =================== Phase 2: OCR Processing ===================
     print("\n=================== Phase 2: Image to Text (OCR) ===================")
     if SKIP_PHASE_2:
-        print("⏭️  Phase 2 SKIPPED (SKIP_PHASE_2=true)")
+        print("[SKIP] Phase 2 SKIPPED (SKIP_PHASE_2=true)")
     else:
         # Choose OCR method: 'ollama' or 'api'
         OCR_METHOD = os.getenv("OCR_METHOD", "ollama")  # default to ollama
@@ -181,7 +181,7 @@ if __name__ == "__main__":
                         txt_path = os.path.join(images_folder, txt_filename)
                         # continue if txt_path already exists
                         if os.path.exists(txt_path):
-                            print(f"✓ OCR result already exists, skipping: {txt_path}")
+                            print(f"[OK] OCR result already exists, skipping: {txt_path}")
                             continue
 
                         ocr_result = ocr_function(image_path)
@@ -193,7 +193,7 @@ if __name__ == "__main__":
                             with open(txt_path, 'w', encoding='utf-8') as f:
                                 f.write(ocr_result)
 
-                            print(f"✓ Saved OCR result to: {txt_path}")
+                            print(f"[OK] Saved OCR result to: {txt_path}")
 
                             elapsed = time.time() - timeStart
 
@@ -201,10 +201,10 @@ if __name__ == "__main__":
                             print("========= Time END =========")
 
                         else:
-                            print(f"✗ OCR failed for: {image_file}")
+                            print(f"[ERR] OCR failed for: {image_file}")
 
                     except Exception as e:
-                        print(f"✗ Error processing {image_file}: {e}")
+                        print(f"[ERR] Error processing {image_file}: {e}")
 
             else:
                 print(f"Images folder does not exist: {images_folder}")
@@ -212,7 +212,7 @@ if __name__ == "__main__":
     # =================== Phase 3: LLM Parsing (Text → JSON) ===================
     print("\n=================== Phase 3: Text to JSON (LLM Parsing) ===================")
     if SKIP_PHASE_3:
-        print("⏭️  Phase 3 SKIPPED (SKIP_PHASE_3=true)")
+        print("[SKIP] Phase 3 SKIPPED (SKIP_PHASE_3=true)")
     else:
         # Initialize LLM Parser
         LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4.1-mini")
@@ -238,17 +238,17 @@ if __name__ == "__main__":
             # Check if JSON output already exists
             json_output_path = os.path.join(OUTPUT_DIR, f"{file_base_name}.json")
             if os.path.exists(json_output_path):
-                print(f"✓ JSON output already exists, skipping: {json_output_path}")
+                print(f"[OK] JSON output already exists, skipping: {json_output_path}")
                 continue
 
             # Check if OCR txt files exist
             if not os.path.exists(images_folder):
-                print(f"✗ Images folder not found: {images_folder}")
+                print(f"[ERR] Images folder not found: {images_folder}")
                 continue
 
             txt_files = sorted([f for f in os.listdir(images_folder) if f.endswith('.txt')])
             if not txt_files:
-                print(f"✗ No OCR txt files found in: {images_folder}")
+                print(f"[ERR] No OCR txt files found in: {images_folder}")
                 continue
 
             print(f"Found {len(txt_files)} OCR text files")
@@ -266,7 +266,7 @@ if __name__ == "__main__":
                 )
 
                 elapsed = time.time() - timeStart
-                print(f"✓ LLM parsing completed in {elapsed:.2f} seconds")
+                print(f"[OK] LLM parsing completed in {elapsed:.2f} seconds")
                 print(f"  Status: {parsed_data.get('extraction_status', 'unknown')}")
                 print(f"  Confidence: {parsed_data.get('confidence_score', 0):.2f}")
 
@@ -274,10 +274,10 @@ if __name__ == "__main__":
                 json_output_path = os.path.join(OUTPUT_DIR, f"{file_base_name}.json")
                 with open(json_output_path, 'w', encoding='utf-8') as f:
                     json.dump(parsed_data, f, ensure_ascii=False, indent=2)
-                print(f"✓ Saved JSON to: {json_output_path}")
+                print(f"[OK] Saved JSON to: {json_output_path}")
 
             except Exception as e:
-                print(f"✗ Error parsing document {doc_id}: {e}")
+                print(f"[ERR] Error parsing document {doc_id}: {e}")
                 import traceback
                 traceback.print_exc()
                 continue
@@ -285,7 +285,7 @@ if __name__ == "__main__":
     # =================== Phase 4: JSON to CSV/Database ===================
     print("\n=================== Phase 4: JSON to CSV/Database ===================")
     if SKIP_PHASE_4:
-        print("⏭️  Phase 4 SKIPPED (SKIP_PHASE_4=true)")
+        print("[SKIP] Phase 4 SKIPPED (SKIP_PHASE_4=true)")
     else:
         # Create output directory and converter
         os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -323,17 +323,17 @@ if __name__ == "__main__":
             import_external=True
         )
 
-        print(f"✓ Phase 4 completed. Output saved to: {OUTPUT_DIR}")
+        print(f"[OK] Phase 4 completed. Output saved to: {OUTPUT_DIR}")
 
     # =================== Phase 5: Summary Generation ===================
     print("\n=================== Phase 5: Summary Generation ===================")
     if SKIP_PHASE_5:
-        print("⏭️  Phase 5 SKIPPED (SKIP_PHASE_5=true)")
+        print("[SKIP] Phase 5 SKIPPED (SKIP_PHASE_5=true)")
     else:
         # Check if database exists
         db_path = os.path.join(OUTPUT_DIR, "nacc_data.db")
         if not os.path.exists(db_path):
-            print(f"✗ Database not found: {db_path}")
+            print(f"[ERR] Database not found: {db_path}")
             print("  Please run Phase 4 first to create the database.")
         else:
             # Create converter for running validation query
@@ -346,7 +346,7 @@ if __name__ == "__main__":
                 output_csv="validation_summary.csv"
             )
 
-            print(f"\n✓ Phase 5 completed. Summary saved to: {OUTPUT_DIR}/validation_summary.csv")
+            print(f"\n[OK] Phase 5 completed. Summary saved to: {OUTPUT_DIR}/validation_summary.csv")
 
     # =================== All Phases Completed ===================
     print("\n" + "=" * 60)

@@ -56,6 +56,7 @@ class JSONToCSVConverter:
         self.input_doc_order = []     # List of doc_ids in order from doc_info.csv
         self.input_nacc_detail = {}   # nacc_id -> {title, first_name, last_name, position, dates, agency, submitter_id}
         self.input_submitter_info = {} # submitter_id -> {title, first_name, last_name, age, status, address, etc.}
+        self.spouse_id_map = {}       # nacc_id -> spouse_id (from Train_spouse_info.csv)
 
     def _safe_get(self, data: dict, key: str, default=None):
         """Safely get value from dict"""
@@ -340,9 +341,9 @@ class JSONToCSVConverter:
                         'type_id': row.get('type_id', '')
                     }
                     self.input_doc_order.append(doc_id)  # Keep order from CSV
-            print(f"✓ Loaded {len(self.input_doc_info)} records from doc_info")
+            print(f"[OK] Loaded {len(self.input_doc_info)} records from doc_info")
         else:
-            print(f"✗ doc_info file not found: {doc_info_path}")
+            print(f"[ERR] doc_info file not found: {doc_info_path}")
 
         # Load nacc_detail - use provided filename or fallback to defaults
         if csv_nacc_detail:
@@ -372,9 +373,9 @@ class JSONToCSVConverter:
                         'royal_start_date': row.get('royal_start_date', ''),
                         'submitter_id': row.get('submitter_id', '')
                     }
-            print(f"✓ Loaded {len(self.input_nacc_detail)} records from nacc_detail")
+            print(f"[OK] Loaded {len(self.input_nacc_detail)} records from nacc_detail")
         else:
-            print(f"✗ nacc_detail file not found: {nacc_detail_path}")
+            print(f"[ERR] nacc_detail file not found: {nacc_detail_path}")
 
         # Load submitter_info - use provided filename or fallback to defaults
         if csv_submitter:
@@ -406,9 +407,35 @@ class JSONToCSVConverter:
                         'mobile_number': row.get('mobile_number', ''),
                         'email': row.get('email', '')
                     }
-            print(f"✓ Loaded {len(self.input_submitter_info)} records from submitter_info")
+            print(f"[OK] Loaded {len(self.input_submitter_info)} records from submitter_info")
         else:
-            print(f"✗ submitter_info file not found: {submitter_info_path}")
+            print(f"[ERR] submitter_info file not found: {submitter_info_path}")
+
+        # Load spouse_id mapping from Train_spouse_info.csv
+        # Look for it in training folder or same directory
+        spouse_info_paths = [
+            os.path.join(os.path.dirname(input_dir), "training", "train output", "Train_spouse_info.csv"),
+            os.path.join(input_dir, "Train_spouse_info.csv"),
+            os.path.join(input_dir, "..", "training", "train output", "Train_spouse_info.csv"),
+            "training/train output/Train_spouse_info.csv"
+        ]
+
+        spouse_info_loaded = False
+        for spouse_info_path in spouse_info_paths:
+            if os.path.exists(spouse_info_path):
+                with open(spouse_info_path, 'r', encoding='utf-8-sig') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        nacc_id = row.get('nacc_id', '')
+                        spouse_id = row.get('spouse_id', '')
+                        if nacc_id and spouse_id:
+                            self.spouse_id_map[nacc_id] = spouse_id
+                print(f"[OK] Loaded {len(self.spouse_id_map)} spouse_id mappings from {spouse_info_path}")
+                spouse_info_loaded = True
+                break
+
+        if not spouse_info_loaded:
+            print("[ERR] Train_spouse_info.csv not found - will use counter for spouse_id")
 
     def _normalize_thai_text(self, text: str) -> str:
         """Normalize Thai text for comparison by removing extra spaces and normalizing Unicode"""
@@ -489,7 +516,7 @@ class JSONToCSVConverter:
             Number of documents processed
         """
         if not self.input_doc_info:
-            print("✗ No doc_info data loaded. Call load_input_data first.")
+            print("[ERR] No doc_info data loaded. Call load_input_data first.")
             return 0
 
         processed_count = 0
@@ -512,7 +539,11 @@ class JSONToCSVConverter:
 
             json_path = os.path.join(json_dir, json_filename) if json_filename else None
 
-            print(f"  doc_id={doc_id}, nacc_id={nacc_id}, file={json_filename}")
+            # Use safe print for Thai filenames on Windows
+            try:
+                print(f"  doc_id={doc_id}, nacc_id={nacc_id}, file={json_filename}")
+            except UnicodeEncodeError:
+                print(f"  doc_id={doc_id}, nacc_id={nacc_id}, file=(Thai filename)")
 
             # Try to find matching JSON file with Unicode normalization
             json_found = False
@@ -545,12 +576,12 @@ class JSONToCSVConverter:
                         override_nacc_id=nacc_id
                     )
                     processed_count += 1
-                    print(f"    ✓ Processed")
+                    print(f"    [OK] Processed")
                 except Exception as e:
-                    print(f"    ✗ Error: {e}")
+                    print(f"    [ERR] Error: {e}")
             else:
                 missing_json.append(doc_id)
-                print(f"    ✗ JSON file not found: {json_path}")
+                print(f"    [ERR] JSON file not found: {json_path}")
 
         print(f"\n--- Processing Complete ---")
         print(f"  Processed: {processed_count} documents")
@@ -695,8 +726,14 @@ class JSONToCSVConverter:
         if not spouse:
             return
 
-        spouse_id = self.spouse_id_counter
-        self.spouse_id_counter += 1
+        # Use spouse_id from Train_spouse_info.csv mapping if available
+        nacc_id_str = str(nacc_id)
+        if nacc_id_str in self.spouse_id_map:
+            spouse_id = int(self.spouse_id_map[nacc_id_str])
+        else:
+            # Fallback to counter if not found in mapping
+            spouse_id = self.spouse_id_counter
+            self.spouse_id_counter += 1
         today = datetime.now().strftime("%Y-%m-%d")
 
         self.spouse_infos.append({
@@ -984,8 +1021,16 @@ class JSONToCSVConverter:
         # Check for statement detail notes
         has_detail_note = 1 if any(d.get("note") for d in statement_details) else 0
 
-        # Get spouse_id (use the counter value - 1 since it was already incremented)
-        spouse_id = self.spouse_id_counter - 1 if spouse else None
+        # Get spouse_id from mapping or use None if no spouse
+        if spouse:
+            nacc_id_str = str(nacc_id)
+            if nacc_id_str in self.spouse_id_map:
+                spouse_id = int(self.spouse_id_map[nacc_id_str])
+            else:
+                # Fallback to counter - 1 since it was already incremented in _process_spouse
+                spouse_id = self.spouse_id_counter - 1
+        else:
+            spouse_id = None
 
         # ==================== Use Input Data for Base Columns ====================
         # Get nacc_detail from input file (for nd_* columns and dates)
@@ -1067,7 +1112,8 @@ class JSONToCSVConverter:
             "asset_other_count": asset_other_count or "NONE",
             "asset_total_valuation_amount": asset_total or "NONE",
             "asset_land_valuation_amount": asset_land_val or "NONE",
-            "asset_building_valuation_amount": asset_building_val or "NONE",
+            # NOTE: asset_building_valuation_amount is always 0 in training data
+            "asset_building_valuation_amount": 0,
             "asset_vehicle_valuation_amount": asset_vehicle_val or "NONE",
             "asset_other_asset_valuation_amount": asset_other_val or "NONE",
             "asset_valuation_submitter_amount": asset_submitter_val or "NONE",
@@ -1102,7 +1148,7 @@ class JSONToCSVConverter:
                         filtered_row[k] = v
                 writer.writerow(filtered_row)
 
-        print(f"✓ Written {len(data)} records to {filename}")
+        print(f"[OK] Written {len(data)} records to {filename}")
 
     def save_all_csv(self, output_prefix: str = "Train"):
         """Save all data to CSV files
@@ -1234,7 +1280,7 @@ class JSONToCSVConverter:
         filepath = os.path.join(self.output_dir, filename)
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(parsed_data, f, ensure_ascii=False, indent=2)
-        print(f"✓ Saved JSON to {filename}")
+        print(f"[OK] Saved JSON to {filename}")
 
     def save_to_sqlite(self, db_name: str = "nacc_data.db", input_dir: str = None,
                         enum_dir: str = None, training_dir: str = None,
@@ -1286,7 +1332,7 @@ class JSONToCSVConverter:
 
         conn.commit()
         conn.close()
-        print(f"\n✓ Saved all data to SQLite database: {db_path}")
+        print(f"\n[OK] Saved all data to SQLite database: {db_path}")
 
     def _create_sqlite_tables(self, cursor):
         """Create all required tables for validation query"""
@@ -1756,7 +1802,7 @@ class JSONToCSVConverter:
                         VALUES (?, ?, ?, ?)
                     ''', (row.get('doc_id'), row.get('doc_location_url'),
                           row.get('type_id'), row.get('nacc_id')))
-            print(f"✓ Imported doc_info from {doc_info_path}")
+            print(f"[OK] Imported doc_info from {doc_info_path}")
 
         # Import Test_nacc_detail.csv (update existing nacc_detail table)
         nacc_detail_path = os.path.join(input_dir, "Test_nacc_detail.csv")
@@ -1789,7 +1835,7 @@ class JSONToCSVConverter:
                         row.get('submitter_id'),
                         row.get('agency')
                     ))
-            print(f"✓ Imported nacc_detail from {nacc_detail_path}")
+            print(f"[OK] Imported nacc_detail from {nacc_detail_path}")
 
         # Import Test_submitter_info.csv (update existing submitter_info table)
         submitter_info_path = os.path.join(input_dir, "Test_submitter_info.csv")
@@ -1823,7 +1869,7 @@ class JSONToCSVConverter:
                         row.get('mobile_number'),
                         row.get('email')
                     ))
-            print(f"✓ Imported submitter_info from {submitter_info_path}")
+            print(f"[OK] Imported submitter_info from {submitter_info_path}")
 
     def import_enum_tables(self, cursor, enum_dir: str = None):
         """
@@ -1841,7 +1887,7 @@ class JSONToCSVConverter:
                 enum_dir = os.path.join(os.path.dirname(base_dir), "enum_type")
 
         if not os.path.exists(enum_dir):
-            print(f"✗ Enum directory not found: {enum_dir}")
+            print(f"[ERR] Enum directory not found: {enum_dir}")
             return
 
         # asset_type.csv
@@ -1863,7 +1909,7 @@ class JSONToCSVConverter:
                         VALUES (?, ?, ?)
                     ''', (row.get('asset_type_id'), row.get('asset_type_main_type_name'),
                           row.get('asset_type_sub_type_name')))
-            print(f"✓ Imported asset_type")
+            print(f"[OK] Imported asset_type")
 
         # relationship.csv
         relationship_path = os.path.join(enum_dir, "relationship.csv")
@@ -1882,7 +1928,7 @@ class JSONToCSVConverter:
                         INSERT INTO relationship (relationship_id, relationship_name)
                         VALUES (?, ?)
                     ''', (row.get('relationship_id'), row.get('relationship_name')))
-            print(f"✓ Imported relationship")
+            print(f"[OK] Imported relationship")
 
         # statement_type.csv
         statement_type_path = os.path.join(enum_dir, "statement_type.csv")
@@ -1901,7 +1947,7 @@ class JSONToCSVConverter:
                         INSERT INTO statement_type (statement_type_id, statement_type_name)
                         VALUES (?, ?)
                     ''', (row.get('statement_type_id'), row.get('statement_type_name')))
-            print(f"✓ Imported statement_type")
+            print(f"[OK] Imported statement_type")
 
         # statement_detail_type.csv
         statement_detail_type_path = os.path.join(enum_dir, "statement_detail_type.csv")
@@ -1922,7 +1968,7 @@ class JSONToCSVConverter:
                         VALUES (?, ?, ?)
                     ''', (row.get('statement_detail_type_id'), row.get('statement_type_id'),
                           row.get('statement_detail_sub_type_name')))
-            print(f"✓ Imported statement_detail_type")
+            print(f"[OK] Imported statement_detail_type")
 
         # asset_acquisition_type.csv
         asset_acquisition_type_path = os.path.join(enum_dir, "asset_acquisition_type.csv")
@@ -1941,7 +1987,7 @@ class JSONToCSVConverter:
                         INSERT INTO asset_acquisition_type (asset_acquisition_type_id, asset_acquisition_type_name)
                         VALUES (?, ?)
                     ''', (row.get('asset_acquisition_type_id'), row.get('asset_acquisition_type_name')))
-            print(f"✓ Imported asset_acquisition_type")
+            print(f"[OK] Imported asset_acquisition_type")
 
         # date_acquiring_type.csv
         date_acquiring_type_path = os.path.join(enum_dir, "date_acquiring_type.csv")
@@ -1960,7 +2006,7 @@ class JSONToCSVConverter:
                         INSERT INTO date_acquiring_type (date_acquiring_type_id, date_acquiring_type_name)
                         VALUES (?, ?)
                     ''', (row.get('date_acquiring_type_id'), row.get('date_acquiring_type_name')))
-            print(f"✓ Imported date_acquiring_type")
+            print(f"[OK] Imported date_acquiring_type")
 
         # date_ending_type.csv
         date_ending_type_path = os.path.join(enum_dir, "date_ending_type.csv")
@@ -1979,7 +2025,7 @@ class JSONToCSVConverter:
                         INSERT INTO date_ending_type (date_ending_type_id, date_ending_type_name)
                         VALUES (?, ?)
                     ''', (row.get('date_ending_type_id'), row.get('date_ending_type_name')))
-            print(f"✓ Imported date_ending_type")
+            print(f"[OK] Imported date_ending_type")
 
         # position_period_type.csv
         position_period_type_path = os.path.join(enum_dir, "position_period_type.csv")
@@ -1998,7 +2044,7 @@ class JSONToCSVConverter:
                         INSERT INTO position_period_type (position_period_type_id, position_period_type_name)
                         VALUES (?, ?)
                     ''', (row.get('position_period_type_id'), row.get('position_period_type_name')))
-            print(f"✓ Imported position_period_type")
+            print(f"[OK] Imported position_period_type")
 
         # position_category_type.csv
         position_category_type_path = os.path.join(enum_dir, "position_category_type.csv")
@@ -2025,7 +2071,7 @@ class JSONToCSVConverter:
                     ''', (row.get('position_category_id'), row.get('corrupt0_category'),
                           row.get('nacc_category_number'), row.get('nacc_category'),
                           row.get('nacc_sub_category_number'), row.get('nacc_sub_category')))
-            print(f"✓ Imported position_category_type")
+            print(f"[OK] Imported position_category_type")
 
     def import_training_data(self, cursor, training_dir: str = None):
         """
@@ -2040,7 +2086,7 @@ class JSONToCSVConverter:
             training_dir = os.path.join(base_dir, "training", "train output")
 
         if not os.path.exists(training_dir):
-            print(f"✗ Training directory not found: {training_dir}")
+            print(f"[ERR] Training directory not found: {training_dir}")
             return
 
         # Create training tables with "train_" prefix
@@ -2064,7 +2110,7 @@ class JSONToCSVConverter:
                         values = [row.get(col, '') for col in reader.fieldnames]
                         cursor.execute(f'INSERT INTO "{table_name}" VALUES ({placeholders})', values)
 
-                    print(f"✓ Imported training data: {table_name}")
+                    print(f"[OK] Imported training data: {table_name}")
 
     def run_validation_query(self, db_name: str = "nacc_data.db", output_csv: str = "validation_summary.csv"):
         """
@@ -2076,7 +2122,7 @@ class JSONToCSVConverter:
         """
         db_path = os.path.join(self.output_dir, db_name)
         if not os.path.exists(db_path):
-            print(f"✗ Database not found: {db_path}")
+            print(f"[ERR] Database not found: {db_path}")
             return
 
         conn = sqlite3.connect(db_path)
@@ -2296,10 +2342,10 @@ ORDER BY d.nacc_id
                 for row in rows:
                     writer.writerow(list(row))
 
-            print(f"✓ Validation query exported to: {output_path}")
+            print(f"[OK] Validation query exported to: {output_path}")
             print(f"  Total records: {len(rows)}")
         else:
-            print("✗ No data returned from validation query")
+            print("[ERR] No data returned from validation query")
 
         conn.close()
 
