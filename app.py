@@ -20,6 +20,9 @@ INPUT_CSV_DOC_INFO = os.getenv("INPUT_CSV_DOC_INFO", "Test_doc_info.csv")
 INPUT_CSV_NACC_DETAIL = os.getenv("INPUT_CSV_NACC_DETAIL", "Test_nacc_detail.csv")
 INPUT_CSV_SUBMITTER = os.getenv("INPUT_CSV_SUBMITTER", "Test_submitter.csv")
 
+# ================ Output File Prefix ================
+OUTPUT_PREFIX = os.getenv("OUTPUT_PREFIX", "Train")  # Prefix for output CSV files (e.g., "Train", "Final")
+
 # Construct full PDF path
 PDF_DIR = os.path.join(INPUT_BASE_DIR, PDF_FOLDER)
 
@@ -53,6 +56,7 @@ if __name__ == "__main__":
     print(f"INPUT_CSV_DOC_INFO: {INPUT_CSV_DOC_INFO}")
     print(f"INPUT_CSV_NACC_DETAIL: {INPUT_CSV_NACC_DETAIL}")
     print(f"INPUT_CSV_SUBMITTER: {INPUT_CSV_SUBMITTER}")
+    print(f"OUTPUT_PREFIX: {OUTPUT_PREFIX}")
     print("=================================================\n")
 
     # Load File doc info
@@ -289,7 +293,12 @@ if __name__ == "__main__":
 
         # Load input data for summary generation
         print("\n--- Loading Input Data ---")
-        converter.load_input_data(INPUT_BASE_DIR)
+        converter.load_input_data(
+            INPUT_BASE_DIR,
+            csv_doc_info=INPUT_CSV_DOC_INFO,
+            csv_nacc_detail=INPUT_CSV_NACC_DETAIL,
+            csv_submitter=INPUT_CSV_SUBMITTER
+        )
 
         # Load all JSON files and process
         json_files = sorted([f for f in os.listdir(OUTPUT_DIR) if f.endswith('.json')])
@@ -310,7 +319,7 @@ if __name__ == "__main__":
 
         # Save all CSV files
         print("\n--- Saving CSV Files ---")
-        converter.save_all_csv()
+        converter.save_all_csv(output_prefix=OUTPUT_PREFIX)
 
         # Save to SQLite database
         print("\n--- Saving to SQLite Database ---")

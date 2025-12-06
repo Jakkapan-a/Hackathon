@@ -1,11 +1,16 @@
+# Ignore folders
+test phase 1/
+test_final/
+training/
+
 # Ignore all CSV, TXT, and PDF files
 *.csv
-*.txt
 *.pdf
 *.sql
 *.png
 *.jpg
 .env
+*.json
 
 */images/*
 

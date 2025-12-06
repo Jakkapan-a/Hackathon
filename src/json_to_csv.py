@@ -303,17 +303,23 @@ class JSONToCSVConverter:
 
         return vehicle_info
 
-    def load_input_data(self, input_dir: str):
+    def load_input_data(self, input_dir: str, csv_doc_info: str = None, csv_nacc_detail: str = None, csv_submitter: str = None):
         """
         Load input CSV files into lookup tables for summary generation
 
         Args:
             input_dir: Directory containing input CSV files (Test_doc_info.csv, etc.)
+            csv_doc_info: Optional filename for doc_info CSV (from ENV)
+            csv_nacc_detail: Optional filename for nacc_detail CSV (from ENV)
+            csv_submitter: Optional filename for submitter_info CSV (from ENV)
         """
-        # Load doc_info
-        doc_info_path = os.path.join(input_dir, "Test_doc_info.csv")
-        if not os.path.exists(doc_info_path):
-            doc_info_path = os.path.join(input_dir, "Train_doc_info.csv")
+        # Load doc_info - use provided filename or fallback to defaults
+        if csv_doc_info:
+            doc_info_path = os.path.join(input_dir, csv_doc_info)
+        else:
+            doc_info_path = os.path.join(input_dir, "Test_doc_info.csv")
+            if not os.path.exists(doc_info_path):
+                doc_info_path = os.path.join(input_dir, "Train_doc_info.csv")
 
         if os.path.exists(doc_info_path):
             with open(doc_info_path, 'r', encoding='utf-8-sig') as f:
@@ -326,11 +332,16 @@ class JSONToCSVConverter:
                         'type_id': row.get('type_id', '')
                     }
             print(f"✓ Loaded {len(self.input_doc_info)} records from doc_info")
+        else:
+            print(f"✗ doc_info file not found: {doc_info_path}")
 
-        # Load nacc_detail
-        nacc_detail_path = os.path.join(input_dir, "Test_nacc_detail.csv")
-        if not os.path.exists(nacc_detail_path):
-            nacc_detail_path = os.path.join(input_dir, "Train_nacc_detail.csv")
+        # Load nacc_detail - use provided filename or fallback to defaults
+        if csv_nacc_detail:
+            nacc_detail_path = os.path.join(input_dir, csv_nacc_detail)
+        else:
+            nacc_detail_path = os.path.join(input_dir, "Test_nacc_detail.csv")
+            if not os.path.exists(nacc_detail_path):
+                nacc_detail_path = os.path.join(input_dir, "Train_nacc_detail.csv")
 
         if os.path.exists(nacc_detail_path):
             with open(nacc_detail_path, 'r', encoding='utf-8-sig') as f:
@@ -353,11 +364,16 @@ class JSONToCSVConverter:
                         'submitter_id': row.get('submitter_id', '')
                     }
             print(f"✓ Loaded {len(self.input_nacc_detail)} records from nacc_detail")
+        else:
+            print(f"✗ nacc_detail file not found: {nacc_detail_path}")
 
-        # Load submitter_info
-        submitter_info_path = os.path.join(input_dir, "Test_submitter_info.csv")
-        if not os.path.exists(submitter_info_path):
-            submitter_info_path = os.path.join(input_dir, "Train_submitter_info.csv")
+        # Load submitter_info - use provided filename or fallback to defaults
+        if csv_submitter:
+            submitter_info_path = os.path.join(input_dir, csv_submitter)
+        else:
+            submitter_info_path = os.path.join(input_dir, "Test_submitter_info.csv")
+            if not os.path.exists(submitter_info_path):
+                submitter_info_path = os.path.join(input_dir, "Train_submitter_info.csv")
 
         if os.path.exists(submitter_info_path):
             with open(submitter_info_path, 'r', encoding='utf-8-sig') as f:
@@ -382,6 +398,8 @@ class JSONToCSVConverter:
                         'email': row.get('email', '')
                     }
             print(f"✓ Loaded {len(self.input_submitter_info)} records from submitter_info")
+        else:
+            print(f"✗ submitter_info file not found: {submitter_info_path}")
 
     def process_document(self, parsed_data: Dict[str, Any], submitter_id: int = None) -> int:
         """
@@ -876,23 +894,27 @@ class JSONToCSVConverter:
 
         print(f"✓ Written {len(data)} records to {filename}")
 
-    def save_all_csv(self):
-        """Save all data to CSV files"""
+    def save_all_csv(self, output_prefix: str = "Train"):
+        """Save all data to CSV files
+
+        Args:
+            output_prefix: Prefix for output filenames (default: "Train")
+        """
         # Statement
-        self._write_csv("Train_statement.csv", self.statements, [
+        self._write_csv(f"{output_prefix}_statement.csv", self.statements, [
             "nacc_id", "statement_type_id", "valuation_submitter", "submitter_id",
             "valuation_spouse", "valuation_child", "latest_submitted_date"
         ])
 
         # Statement details
-        self._write_csv("Train_statement_detail.csv", self.statement_details, [
+        self._write_csv(f"{output_prefix}_statement_detail.csv", self.statement_details, [
             "nacc_id", "submitter_id", "statement_detail_type_id", "index",
             "detail", "valuation_submitter", "valuation_spouse", "valuation_child",
             "note", "latest_submitted_date"
         ])
 
         # Assets
-        self._write_csv("Train_asset.csv", self.assets, [
+        self._write_csv(f"{output_prefix}_asset.csv", self.assets, [
             "asset_id", "submitter_id", "nacc_id", "index", "asset_type_id",
             "asset_type_other", "asset_name", "date_acquiring_type_id",
             "acquiring_date", "acquiring_month", "acquiring_year",
@@ -903,37 +925,37 @@ class JSONToCSVConverter:
         ])
 
         # Asset land info
-        self._write_csv("Train_asset_land_info.csv", self.asset_land_infos, [
+        self._write_csv(f"{output_prefix}_asset_land_info.csv", self.asset_land_infos, [
             "asset_id", "nacc_id", "land_type", "land_number",
             "area_rai", "area_ngan", "area_sqwa", "province", "latest_submitted_date"
         ])
 
         # Asset building info
-        self._write_csv("Train_asset_building_info.csv", self.asset_building_infos, [
+        self._write_csv(f"{output_prefix}_asset_building_info.csv", self.asset_building_infos, [
             "asset_id", "nacc_id", "building_type", "building_name",
             "room_number", "province", "latest_submitted_date"
         ])
 
         # Asset vehicle info
-        self._write_csv("Train_asset_vehicle_info.csv", self.asset_vehicle_infos, [
+        self._write_csv(f"{output_prefix}_asset_vehicle_info.csv", self.asset_vehicle_infos, [
             "asset_id", "nacc_id", "vehicle_type", "brand", "model",
             "registration", "province", "latest_submitted_date"
         ])
 
         # Asset other info
-        self._write_csv("Train_asset_other_asset_info.csv", self.asset_other_infos, [
+        self._write_csv(f"{output_prefix}_asset_other_asset_info.csv", self.asset_other_infos, [
             "asset_id", "nacc_id", "description", "latest_submitted_date"
         ])
 
         # Relative info
-        self._write_csv("Train_relative_info.csv", self.relative_infos, [
+        self._write_csv(f"{output_prefix}_relative_info.csv", self.relative_infos, [
             "relative_id", "submitter_id", "nacc_id", "index", "relationship_id",
             "title", "first_name", "last_name", "age", "address", "occupation",
             "school", "workplace", "workplace_location", "latest_submitted_date", "is_death"
         ])
 
         # Spouse info
-        self._write_csv("Train_spouse_info.csv", self.spouse_infos, [
+        self._write_csv(f"{output_prefix}_spouse_info.csv", self.spouse_infos, [
             "spouse_id", "submitter_id", "nacc_id", "title", "first_name", "last_name",
             "title_en", "first_name_en", "last_name_en", "age", "status",
             "status_date", "status_month", "status_year", "sub_district", "district",
@@ -942,13 +964,13 @@ class JSONToCSVConverter:
         ])
 
         # Submitter old name
-        self._write_csv("Train_submitter_old_name.csv", self.submitter_old_names, [
+        self._write_csv(f"{output_prefix}_submitter_old_name.csv", self.submitter_old_names, [
             "submitter_id", "nacc_id", "index", "title", "first_name", "last_name",
             "title_en", "first_name_en", "last_name_en", "latest_submitted_date"
         ])
 
         # Submitter position
-        self._write_csv("Train_submitter_position.csv", self.submitter_positions, [
+        self._write_csv(f"{output_prefix}_submitter_position.csv", self.submitter_positions, [
             "submitter_id", "nacc_id", "position_period_type_id", "index", "position",
             "position_category_type_id", "workplace", "workplace_location",
             "date_acquiring_type_id", "start_date", "start_month", "start_year",
@@ -957,20 +979,20 @@ class JSONToCSVConverter:
         ])
 
         # Spouse old name
-        self._write_csv("Train_spouse_old_name.csv", self.spouse_old_names, [
+        self._write_csv(f"{output_prefix}_spouse_old_name.csv", self.spouse_old_names, [
             "spouse_id", "index", "title", "first_name", "last_name",
             "title_en", "first_name_en", "last_name_en", "submitter_id", "nacc_id",
             "latest_submitted_date"
         ])
 
         # Spouse position
-        self._write_csv("Train_spouse_position.csv", self.spouse_positions, [
+        self._write_csv(f"{output_prefix}_spouse_position.csv", self.spouse_positions, [
             "spouse_id", "submitter_id", "nacc_id", "position_period_type_id", "index",
             "position", "workplace", "workplace_location", "note", "latest_submitted_date"
         ])
 
         # Summary - matching training data format
-        self._write_csv("Train_summary.csv", self.summaries, [
+        self._write_csv(f"{output_prefix}_summary.csv", self.summaries, [
             "id", "doc_id", "nd_title", "nd_first_name", "nd_last_name", "nd_position",
             "submitted_date", "disclosure_announcement_date", "disclosure_start_date",
             "disclosure_end_date", "date_by_submitted_case", "royal_start_date", "agency",

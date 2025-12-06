@@ -30,8 +30,6 @@ Name: allow-ollama-11434
 
 Direction: Ingress
 
-Source: แนะนำใส่ IP ตัวเองแบบ x.x.x.x/32 (จะปลอดภัยกว่า 0.0.0.0/0)
-
 Protocol: TCP
 
 Port: 11434
