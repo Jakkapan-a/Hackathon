@@ -247,13 +247,20 @@ NACC ID: {nacc_id}
     {{
       "statement_detail_type_id": 1-20,
       "index": ลำดับ,
-      "detail": "รายละเอียด เช่น เงินเดือน, ค่าเช่า",
+      "detail": "รายละเอียดหมวดหมู่หลัก เช่น เงินเดือน, ค่าเช่า, ค่าอุปโภคบริโภค",
       "valuation_submitter": ตัวเลขหรือnull,
       "valuation_spouse": ตัวเลขหรือnull,
       "valuation_child": ตัวเลขหรือnull,
       "note": "หมายเหตุ"
     }}
   ],
+
+=== กฎสำคัญสำหรับ statement_details ===
+1. สกัดเฉพาะรายการหมวดหมู่หลัก (เช่น "เงินเดือน", "ค่าเช่า", "ค่าอุปโภคบริโภค") ไม่ใช่รายละเอียดย่อย
+2. ห้ามสกัดรายการบัญชีธนาคารแต่ละบัญชี - ให้รวมเป็น "เงินฝากธนาคาร" หมวดเดียว
+3. ห้ามสกัดรายการหุ้นหรือกองทุนแต่ละตัว - ให้รวมเป็น "เงินลงทุน" หมวดเดียว
+4. จำนวน statement_details ควรมีประมาณ 10-30 รายการ ไม่ใช่ 100+ รายการ
+5. ถ้าเห็น table ที่มีหลายแถว ให้สกัดเฉพาะแถวที่มีชื่อหมวดหมู่ (เช่น (1) ค่าอุปโภคบริโภค) ไม่ใช่ทุกแถว
 
   "assets": [
     {{
@@ -548,13 +555,15 @@ Enum References:
   "statement_details": [
     {{
       "statement_detail_type_id": 1-20,
-      "detail": "รายละเอียด",
+      "detail": "รายละเอียดหมวดหมู่หลักเท่านั้น (เช่น ค่าอุปโภคบริโภค, เงินเดือน)",
       "valuation_submitter": ตัวเลข,
       "valuation_spouse": ตัวเลข,
       "valuation_child": ตัวเลข,
       "note": null
     }}
   ],
+
+กฎสำคัญ: สกัดเฉพาะหมวดหมู่หลัก ไม่ใช่รายละเอียดย่อย (เช่น ไม่สกัดแต่ละบัญชีธนาคาร)
 
   "assets": [
     {{
@@ -648,6 +657,21 @@ Enum References:
                     by_type[type_id] = stmt
         return list(by_type.values())
 
+    def _dedupe_statement_details(self, details: List[Dict]) -> List[Dict]:
+        """Remove duplicate statement_details based on type_id and detail name"""
+        seen = set()
+        unique = []
+        for det in details:
+            type_id = det.get("statement_detail_type_id")
+            detail = det.get("detail", "")
+            # Normalize detail text for comparison
+            detail_norm = detail.lower().strip() if detail else ""
+            key = (type_id, detail_norm)
+            if key not in seen:
+                seen.add(key)
+                unique.append(det)
+        return unique
+
     def merge_parsed_pages(self, page_results: List[Dict], doc_id: str, nacc_id: int) -> Dict[str, Any]:
         """
         Merge parsed results from all pages into a single document
@@ -713,6 +737,11 @@ Enum References:
         # Deduplicate
         merged["relatives"] = self._dedupe_relatives(merged["relatives"])
         merged["statements"] = self._dedupe_statements(merged["statements"])
+        merged["statement_details"] = self._dedupe_statement_details(merged["statement_details"])
+
+        # Re-index statement_details
+        for i, det in enumerate(merged["statement_details"], 1):
+            det["index"] = i
 
         # Re-index assets
         for i, asset in enumerate(merged["assets"], 1):

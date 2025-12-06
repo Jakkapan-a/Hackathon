@@ -855,10 +855,28 @@ class JSONToCSVConverter:
                 "latest_submitted_date": today
             })
 
+    def _dedupe_statement_details(self, details: List[Dict]) -> List[Dict]:
+        """Remove duplicate statement_details based on type_id and detail name"""
+        seen = set()
+        unique = []
+        for det in details:
+            type_id = det.get("statement_detail_type_id")
+            detail_text = det.get("detail", "")
+            # Normalize detail text for comparison
+            detail_norm = detail_text.lower().strip() if detail_text else ""
+            key = (type_id, detail_norm)
+            if key not in seen:
+                seen.add(key)
+                unique.append(det)
+        return unique
+
     def _process_statement_details(self, data: Dict, submitter_id: int, nacc_id: int):
         """Process statement details"""
         details = data.get("statement_details", [])
         today = datetime.now().strftime("%Y-%m-%d")
+
+        # Deduplicate statement_details
+        details = self._dedupe_statement_details(details)
 
         for detail in details:
             self.statement_details.append({
