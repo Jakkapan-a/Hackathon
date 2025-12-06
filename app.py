@@ -300,22 +300,10 @@ if __name__ == "__main__":
             csv_submitter=INPUT_CSV_SUBMITTER
         )
 
-        # Load all JSON files and process
-        json_files = sorted([f for f in os.listdir(OUTPUT_DIR) if f.endswith('.json')])
-        print(f"Found {len(json_files)} JSON files to process")
-
-        for json_file in json_files:
-            json_path = os.path.join(OUTPUT_DIR, json_file)
-            print(f"Processing: {json_file}")
-
-            try:
-                with open(json_path, 'r', encoding='utf-8') as f:
-                    parsed_data = json.load(f)
-                converter.process_document(parsed_data)
-                print(f"✓ Processed: {json_file}")
-            except Exception as e:
-                print(f"✗ Error processing {json_file}: {e}")
-                continue
+        # Process documents using doc_info.csv as driver
+        # This ensures correct doc_id and nacc_id mapping from doc_info.csv
+        # instead of relying on potentially incorrect values in JSON files
+        converter.process_from_doc_info(OUTPUT_DIR)
 
         # Save all CSV files
         print("\n--- Saving CSV Files ---")

@@ -10,6 +10,7 @@ import csv
 import json
 import re
 import sqlite3
+import unicodedata
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
@@ -52,6 +53,7 @@ class JSONToCSVConverter:
 
         # Input data lookup tables (loaded from input CSV files)
         self.input_doc_info = {}      # doc_id -> {nacc_id, doc_location_url, type_id}
+        self.input_doc_order = []     # List of doc_ids in order from doc_info.csv
         self.input_nacc_detail = {}   # nacc_id -> {title, first_name, last_name, position, dates, agency, submitter_id}
         self.input_submitter_info = {} # submitter_id -> {title, first_name, last_name, age, status, address, etc.}
 
@@ -60,9 +62,15 @@ class JSONToCSVConverter:
         return data.get(key, default) if data else default
 
     def _format_date(self, date_str: str) -> str:
-        """Format date string"""
+        """Format date string to YYYY-MM-DD format"""
         if not date_str:
-            return ""
+            return "NONE"
+        # Convert D/M/YYYY or DD/MM/YYYY to YYYY-MM-DD
+        if '/' in date_str:
+            parts = date_str.split('/')
+            if len(parts) == 3:
+                day, month, year = parts
+                return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
         return date_str
 
     def _parse_land_info(self, asset_name: str, asset_type_id: int) -> Dict[str, Any]:
@@ -331,6 +339,7 @@ class JSONToCSVConverter:
                         'doc_location_url': row.get('doc_location_url', ''),
                         'type_id': row.get('type_id', '')
                     }
+                    self.input_doc_order.append(doc_id)  # Keep order from CSV
             print(f"✓ Loaded {len(self.input_doc_info)} records from doc_info")
         else:
             print(f"✗ doc_info file not found: {doc_info_path}")
@@ -401,13 +410,165 @@ class JSONToCSVConverter:
         else:
             print(f"✗ submitter_info file not found: {submitter_info_path}")
 
-    def process_document(self, parsed_data: Dict[str, Any], submitter_id: int = None) -> int:
+    def _normalize_thai_text(self, text: str) -> str:
+        """Normalize Thai text for comparison by removing extra spaces and normalizing Unicode"""
+        import unicodedata
+        if not text:
+            return ''
+        # Normalize Unicode (NFC form)
+        normalized = unicodedata.normalize('NFC', text)
+        # Remove extra spaces
+        return normalized.strip()
+
+    def _find_nacc_id_by_name(self, first_name: str, last_name: str) -> Optional[int]:
+        """
+        Find nacc_id from nacc_detail by matching first_name and last_name.
+        Uses normalized comparison to handle Unicode variations.
+
+        Args:
+            first_name: First name to search
+            last_name: Last name to search
+
+        Returns:
+            nacc_id if found, None otherwise
+        """
+        norm_first = self._normalize_thai_text(first_name)
+        norm_last = self._normalize_thai_text(last_name)
+
+        for nacc_id, detail in self.input_nacc_detail.items():
+            detail_first = self._normalize_thai_text(detail.get('first_name', ''))
+            detail_last = self._normalize_thai_text(detail.get('last_name', ''))
+
+            # Exact match after normalization
+            if detail_first == norm_first and detail_last == norm_last:
+                return int(nacc_id)
+
+        # If no exact match, try partial match (first name only)
+        for nacc_id, detail in self.input_nacc_detail.items():
+            detail_first = self._normalize_thai_text(detail.get('first_name', ''))
+            if detail_first == norm_first and norm_first:
+                return int(nacc_id)
+
+        return None
+
+    def _extract_name_from_filename(self, filename: str) -> Tuple[str, str]:
+        """
+        Extract first_name and last_name from PDF/JSON filename.
+        Filename format: firstname_lastname_position_case_date.pdf
+
+        Args:
+            filename: PDF or JSON filename
+
+        Returns:
+            Tuple of (first_name, last_name)
+        """
+        # Remove extension
+        base_name = os.path.splitext(filename)[0]
+        # Split by underscore
+        parts = base_name.split('_')
+        if len(parts) >= 2:
+            first_name = parts[0]
+            last_name = parts[1]
+            return first_name, last_name
+        return '', ''
+
+    def process_from_doc_info(self, json_dir: str) -> int:
+        """
+        Process all documents using doc_info.csv as the driver.
+
+        For each row in doc_info.csv:
+        1. Use doc_id from doc_info.csv
+        2. Use nacc_id from doc_info.csv to lookup data from nacc_detail.csv and submitter_info.csv
+        3. Find JSON file by doc_location_url (filename)
+        4. Process and generate output row
+
+        Args:
+            json_dir: Directory containing JSON files
+
+        Returns:
+            Number of documents processed
+        """
+        if not self.input_doc_info:
+            print("✗ No doc_info data loaded. Call load_input_data first.")
+            return 0
+
+        processed_count = 0
+        missing_json = []
+
+        print(f"\n--- Processing {len(self.input_doc_order)} documents from doc_info ---")
+
+        for doc_id in self.input_doc_order:
+            doc_info = self.input_doc_info.get(doc_id, {})
+            nacc_id = int(doc_info.get('nacc_id', 0))
+            doc_location_url = doc_info.get('doc_location_url', '')
+
+            # Get JSON filename from doc_location_url (replace .pdf with .json)
+            if doc_location_url:
+                json_filename = os.path.splitext(doc_location_url)[0] + '.json'
+                # Normalize Unicode for Thai filename matching
+                json_filename = unicodedata.normalize('NFC', json_filename)
+            else:
+                json_filename = None
+
+            json_path = os.path.join(json_dir, json_filename) if json_filename else None
+
+            print(f"  doc_id={doc_id}, nacc_id={nacc_id}, file={json_filename}")
+
+            # Try to find matching JSON file with Unicode normalization
+            json_found = False
+            if json_path:
+                # First try exact path
+                if os.path.exists(json_path):
+                    json_found = True
+                else:
+                    # Try to find file by scanning directory with normalized comparison
+                    try:
+                        for f in os.listdir(json_dir):
+                            if f.endswith('.json'):
+                                normalized_f = unicodedata.normalize('NFC', f)
+                                if normalized_f == json_filename:
+                                    json_path = os.path.join(json_dir, f)
+                                    json_found = True
+                                    break
+                    except Exception:
+                        pass
+
+            if json_found:
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        parsed_data = json.load(f)
+
+                    # Process with doc_id and nacc_id from doc_info.csv (NOT from JSON file)
+                    self.process_document(
+                        parsed_data,
+                        override_doc_id=str(doc_id),
+                        override_nacc_id=nacc_id
+                    )
+                    processed_count += 1
+                    print(f"    ✓ Processed")
+                except Exception as e:
+                    print(f"    ✗ Error: {e}")
+            else:
+                missing_json.append(doc_id)
+                print(f"    ✗ JSON file not found: {json_path}")
+
+        print(f"\n--- Processing Complete ---")
+        print(f"  Processed: {processed_count} documents")
+        if missing_json:
+            print(f"  Missing JSON: {len(missing_json)} documents: {missing_json}")
+
+        return processed_count
+
+    def process_document(self, parsed_data: Dict[str, Any], submitter_id: int = None,
+                         override_doc_id: str = None, override_nacc_id: int = None) -> int:
         """
         Process a single parsed document and add to data containers
 
         Args:
             parsed_data: Parsed JSON data from LLM
             submitter_id: Optional submitter ID, auto-generated if not provided
+            override_doc_id: Override doc_id from doc_info.csv (use this instead of JSON value)
+            override_nacc_id: Override nacc_id from doc_info.csv (use this instead of JSON value)
 
         Returns:
             submitter_id used
@@ -416,8 +577,9 @@ class JSONToCSVConverter:
             submitter_id = self.submitter_id_counter
             self.submitter_id_counter += 1
 
-        doc_id = parsed_data.get("doc_id", "")
-        nacc_id = parsed_data.get("nacc_id", 0)
+        # Use override values from doc_info.csv if provided, otherwise use JSON values
+        doc_id = override_doc_id if override_doc_id is not None else parsed_data.get("doc_id", "")
+        nacc_id = override_nacc_id if override_nacc_id is not None else parsed_data.get("nacc_id", 0)
 
         # Process submitter info
         self._process_submitter(parsed_data, submitter_id, nacc_id)
@@ -498,18 +660,34 @@ class JSONToCSVConverter:
         # Process submitter old names
         old_names = submitter.get("old_names", [])
         for idx, old_name in enumerate(old_names, 1):
-            self.submitter_old_names.append({
-                "submitter_id": submitter_id,
-                "nacc_id": nacc_id,
-                "index": self._safe_get(old_name, "index", idx),
-                "title": self._safe_get(old_name, "title", ""),
-                "first_name": self._safe_get(old_name, "first_name", ""),
-                "last_name": self._safe_get(old_name, "last_name", ""),
-                "title_en": self._safe_get(old_name, "title_en", ""),
-                "first_name_en": self._safe_get(old_name, "first_name_en", ""),
-                "last_name_en": self._safe_get(old_name, "last_name_en", ""),
-                "latest_submitted_date": today
-            })
+            # Handle both string and dict formats
+            if isinstance(old_name, str):
+                # If old_name is a plain string, treat as first_name
+                self.submitter_old_names.append({
+                    "submitter_id": submitter_id,
+                    "nacc_id": nacc_id,
+                    "index": idx,
+                    "title": "",
+                    "first_name": old_name,
+                    "last_name": "",
+                    "title_en": "",
+                    "first_name_en": "",
+                    "last_name_en": "",
+                    "latest_submitted_date": today
+                })
+            else:
+                self.submitter_old_names.append({
+                    "submitter_id": submitter_id,
+                    "nacc_id": nacc_id,
+                    "index": self._safe_get(old_name, "index", idx),
+                    "title": self._safe_get(old_name, "title", ""),
+                    "first_name": self._safe_get(old_name, "first_name", ""),
+                    "last_name": self._safe_get(old_name, "last_name", ""),
+                    "title_en": self._safe_get(old_name, "title_en", ""),
+                    "first_name_en": self._safe_get(old_name, "first_name_en", ""),
+                    "last_name_en": self._safe_get(old_name, "last_name_en", ""),
+                    "latest_submitted_date": today
+                })
 
     def _process_spouse(self, data: Dict, submitter_id: int, nacc_id: int):
         """Process spouse information"""
@@ -549,19 +727,36 @@ class JSONToCSVConverter:
         # Process spouse old names
         old_names = spouse.get("old_names", [])
         for idx, old_name in enumerate(old_names, 1):
-            self.spouse_old_names.append({
-                "spouse_id": spouse_id,
-                "index": self._safe_get(old_name, "index", idx),
-                "title": self._safe_get(old_name, "title", ""),
-                "first_name": self._safe_get(old_name, "first_name", ""),
-                "last_name": self._safe_get(old_name, "last_name", ""),
-                "title_en": self._safe_get(old_name, "title_en", ""),
-                "first_name_en": self._safe_get(old_name, "first_name_en", ""),
-                "last_name_en": self._safe_get(old_name, "last_name_en", ""),
-                "submitter_id": submitter_id,
-                "nacc_id": nacc_id,
-                "latest_submitted_date": today
-            })
+            # Handle both string and dict formats
+            if isinstance(old_name, str):
+                # If old_name is a plain string, treat as first_name
+                self.spouse_old_names.append({
+                    "spouse_id": spouse_id,
+                    "index": idx,
+                    "title": "",
+                    "first_name": old_name,
+                    "last_name": "",
+                    "title_en": "",
+                    "first_name_en": "",
+                    "last_name_en": "",
+                    "submitter_id": submitter_id,
+                    "nacc_id": nacc_id,
+                    "latest_submitted_date": today
+                })
+            else:
+                self.spouse_old_names.append({
+                    "spouse_id": spouse_id,
+                    "index": self._safe_get(old_name, "index", idx),
+                    "title": self._safe_get(old_name, "title", ""),
+                    "first_name": self._safe_get(old_name, "first_name", ""),
+                    "last_name": self._safe_get(old_name, "last_name", ""),
+                    "title_en": self._safe_get(old_name, "title_en", ""),
+                    "first_name_en": self._safe_get(old_name, "first_name_en", ""),
+                    "last_name_en": self._safe_get(old_name, "last_name_en", ""),
+                    "submitter_id": submitter_id,
+                    "nacc_id": nacc_id,
+                    "latest_submitted_date": today
+                })
 
         # Process spouse positions
         positions = spouse.get("positions", [])
@@ -806,24 +1001,28 @@ class JSONToCSVConverter:
         def get_value(val, fallback="NONE"):
             return val if val and val.strip() else fallback
 
+        # Helper function to format date
+        def format_date(val):
+            return self._format_date(val) if val and val.strip() else "NONE"
+
         self.summaries.append({
             # ID columns - from nacc_detail
             "id": nacc_id,
             "doc_id": doc_id,
 
-            # nd_* columns - from nacc_detail input file
-            "nd_title": get_value(nacc_detail.get('title', '')),
-            "nd_first_name": get_value(nacc_detail.get('first_name', '')),
-            "nd_last_name": get_value(nacc_detail.get('last_name', '')),
+            # nd_* columns - from nacc_detail input file, fallback to submitter_info
+            "nd_title": get_value(nacc_detail.get('title', '')) or get_value(submitter_input.get('title', '')),
+            "nd_first_name": get_value(nacc_detail.get('first_name', '')) or get_value(submitter_input.get('first_name', '')),
+            "nd_last_name": get_value(nacc_detail.get('last_name', '')) or get_value(submitter_input.get('last_name', '')),
             "nd_position": get_value(nacc_detail.get('position', '')),
 
-            # Date columns - from nacc_detail input file
-            "submitted_date": get_value(nacc_detail.get('submitted_date', '')),
-            "disclosure_announcement_date": get_value(nacc_detail.get('disclosure_announcement_date', '')),
-            "disclosure_start_date": get_value(nacc_detail.get('disclosure_start_date', '')),
-            "disclosure_end_date": get_value(nacc_detail.get('disclosure_end_date', '')),
-            "date_by_submitted_case": get_value(nacc_detail.get('date_by_submitted_case', '')),
-            "royal_start_date": get_value(nacc_detail.get('royal_start_date', '')),
+            # Date columns - from nacc_detail input file (format to YYYY-MM-DD)
+            "submitted_date": format_date(nacc_detail.get('submitted_date', '')),
+            "disclosure_announcement_date": format_date(nacc_detail.get('disclosure_announcement_date', '')),
+            "disclosure_start_date": format_date(nacc_detail.get('disclosure_start_date', '')),
+            "disclosure_end_date": format_date(nacc_detail.get('disclosure_end_date', '')),
+            "date_by_submitted_case": format_date(nacc_detail.get('date_by_submitted_case', '')),
+            "royal_start_date": format_date(nacc_detail.get('royal_start_date', '')),
             "agency": get_value(nacc_detail.get('agency', '')),
 
             # submitter_* columns - from submitter_info input file
@@ -846,14 +1045,14 @@ class JSONToCSVConverter:
 
             # spouse_* columns - from LLM parsed data
             "spouse_id": spouse_id if spouse else "NONE",
-            "spouse_title": self._safe_get(spouse, "title", "") if spouse else "NONE",
-            "spouse_first_name": self._safe_get(spouse, "first_name", "") if spouse else "NONE",
-            "spouse_last_name": self._safe_get(spouse, "last_name", "") if spouse else "NONE",
-            "spouse_age": self._safe_get(spouse, "age", "") if spouse else "NONE",
-            "spouse_status": self._safe_get(spouse, "status", "") if spouse else "NONE",
-            "spouse_status_date": self._safe_get(spouse, "status_date", "") if spouse else "NONE",
-            "spouse_status_month": self._safe_get(spouse, "status_month", "") if spouse else "NONE",
-            "spouse_status_year": self._safe_get(spouse, "status_year", "") if spouse else "NONE",
+            "spouse_title": self._safe_get(spouse, "title", "NONE") if spouse else "NONE",
+            "spouse_first_name": self._safe_get(spouse, "first_name", "NONE") if spouse else "NONE",
+            "spouse_last_name": self._safe_get(spouse, "last_name", "NONE") if spouse else "NONE",
+            "spouse_age": self._safe_get(spouse, "age", "NONE") if spouse else "NONE",
+            "spouse_status": self._safe_get(spouse, "status", "NONE") if spouse else "NONE",
+            "spouse_status_date": self._safe_get(spouse, "status_date", "NONE") if spouse else "NONE",
+            "spouse_status_month": self._safe_get(spouse, "status_month", "NONE") if spouse else "NONE",
+            "spouse_status_year": self._safe_get(spouse, "status_year", "NONE") if spouse else "NONE",
 
             # Calculated columns - from LLM parsed data
             "statement_valuation_submitter_total": total_valuation_submitter or "NONE",
@@ -884,12 +1083,23 @@ class JSONToCSVConverter:
             return
 
         filepath = os.path.join(self.output_dir, filename)
-        with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
+        with open(filepath, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for row in data:
                 # Only include fields that exist in fieldnames
-                filtered_row = {k: v for k, v in row.items() if k in fieldnames}
+                filtered_row = {}
+                for k, v in row.items():
+                    if k not in fieldnames:
+                        continue
+                    # Convert float to int if it's a whole number (remove .0)
+                    if isinstance(v, float) and v == int(v):
+                        filtered_row[k] = int(v)
+                    # Convert empty string to NONE for consistency
+                    elif v == '' or v is None:
+                        filtered_row[k] = 'NONE'
+                    else:
+                        filtered_row[k] = v
                 writer.writerow(filtered_row)
 
         print(f"✓ Written {len(data)} records to {filename}")
@@ -990,6 +1200,11 @@ class JSONToCSVConverter:
             "spouse_id", "submitter_id", "nacc_id", "position_period_type_id", "index",
             "position", "workplace", "workplace_location", "note", "latest_submitted_date"
         ])
+
+        # Sort summaries by doc_id order from doc_info.csv
+        if self.input_doc_order:
+            doc_order_map = {doc_id: idx for idx, doc_id in enumerate(self.input_doc_order)}
+            self.summaries.sort(key=lambda x: doc_order_map.get(str(x.get('doc_id', '')), 999999))
 
         # Summary - matching training data format
         self._write_csv(f"{output_prefix}_summary.csv", self.summaries, [
