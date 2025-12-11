@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NACC Asset Declaration Parser - Presentation</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans Thai', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        .presentation {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        .slide {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            padding: 60px 80px;
+            display: none;
+            flex-direction: column;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        .slide.active {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(30px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #00d4ff, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            font-weight: 500;
+            color: #94a3b8;
+            margin-bottom: 40px;
+        }
+
+        h3 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #00d4ff;
+            margin: 20px 0 15px 0;
+        }
+
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            overflow-y: auto;
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+        }
+
+        .three-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 30px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .card.highlight {
+            border-color: #00d4ff;
+            box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
+        }
+
+        .card.warning {
+            border-color: #fbbf24;
+            box-shadow: 0 0 30px rgba(251, 191, 36, 0.2);
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+
+        li::before {
+            content: "▸";
+            position: absolute;
+            left: 0;
+            color: #00d4ff;
+        }
+
+        .pipeline {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 40px 0;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .pipeline-step {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(124, 58, 237, 0.2));
+            border-radius: 12px;
+            padding: 20px 30px;
+            text-align: center;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            min-width: 150px;
+        }
+
+        .pipeline-step .number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #00d4ff;
+        }
+
+        .pipeline-step .label {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            margin-top: 5px;
+        }
+
+        .pipeline-arrow {
+            font-size: 2rem;
+            color: #00d4ff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+            background: rgba(0, 212, 255, 0.1);
+            color: #00d4ff;
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.9rem;
+            color: #00d4ff;
+        }
+
+        pre {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 20px;
+            border-radius: 12px;
+            overflow-x: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tech-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #00d4ff, #7c3aed);
+            padding: 8px 16px;
+            border-radius: 20px;
+            margin: 5px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+
+        .navigation {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            display: flex;
+            gap: 15px;
+            z-index: 100;
+        }
+
+        .nav-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid #00d4ff;
+            background: rgba(0, 212, 255, 0.1);
+            color: #00d4ff;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .nav-btn:hover {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+
+        .slide-counter {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            font-size: 1rem;
+            color: #94a3b8;
+        }
+
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #00d4ff, #7c3aed);
+            transition: width 0.3s ease;
+        }
+
+        .title-slide {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .title-slide h1 {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+
+        .title-slide h2 {
+            font-size: 2rem;
+        }
+
+        .checkmark {
+            color: #10b981;
+        }
+
+        .architecture-diagram {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 16px;
+            padding: 30px;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .layer {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+
+        .layer-title {
+            color: #00d4ff;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .layer-content {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .layer-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px 20px;
+            border-radius: 8px;
+        }
+
+        .thank-you {
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .thank-you h1 {
+            font-size: 5rem;
+        }
+
+        .file-tree {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 12px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.9rem;
+        }
+
+        .file-tree .folder {
+            color: #fbbf24;
+        }
+
+        .file-tree .file {
+            color: #94a3b8;
+        }
+
+        .keyboard-hint {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #64748b;
+            font-size: 0.8rem;
+        }
+
+        .recommendation-item {
+            background: rgba(251, 191, 36, 0.1);
+            border-left: 4px solid #fbbf24;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 0 12px 12px 0;
+        }
+
+        .recommendation-item h4 {
+            color: #fbbf24;
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+
+        .recommendation-item p {
+            color: #e2e8f0;
+            line-height: 1.6;
+        }
+
+        .kaggle-link {
+            color: #00d4ff;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .kaggle-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="progress-bar" id="progressBar"></div>
+
+    <div class="presentation">
+        <!-- Slide 1: Title -->
+        <div class="slide title-slide active" id="slide1">
+            <h1>Hackathon</h1>
+            <h1>NACC Asset Declaration Parser</h1>
+            <h2>ระบบประมวลผลบัญชีทรัพย์สินอัตโนมัติ</h2>
+            <div style="margin-top: 40px;">
+                <span class="tech-badge">Python</span>
+                <span class="tech-badge">LLM</span>
+                <span class="tech-badge">Typhoon OCR</span>
+                <span class="tech-badge">GPT-4o-mini</span>
+            </div>
+            <p style="margin-top: 40px; color: #94a3b8;">
+                <a href="https://www.kaggle.com/competitions/hack-the-assetdeclaration-data/overview" target="_blank" class="kaggle-link">
+                    Kaggle Competition: Hack the Asset Declaration Data
+                </a>
+            </p>
+            <p style="margin-top: 60px; color: #64748b;">กด → หรือ Space เพื่อไปหน้าถัดไป</p>
+        </div>
+
+        <!-- Slide 2: Problem Statement -->
+        <div class="slide" id="slide2">
+            <h1>ปัญหาที่ต้องแก้ไข</h1>
+            <h2>Problem Statement</h2>
+            <div class="content">
+                <div class="two-column">
+                    <div class="card">
+                        <h3>ความท้าทายในปัจจุบัน</h3>
+                        <table>
+                            <tr>
+                                <td>เอกสารบัญชีทรัพย์สินเป็น PDF</td>
+                                <td style="color: #f87171;">ไม่สามารถค้นหาหรือวิเคราะห์ได้</td>
+                            </tr>
+                            <tr>
+                                <td>การกรอกข้อมูลด้วยมือ</td>
+                                <td style="color: #f87171;">เกิดข้อผิดพลาด ใช้เวลานาน</td>
+                            </tr>
+                            <tr>
+                                <td>ข้อมูลไม่เป็นมาตรฐาน</td>
+                                <td style="color: #f87171;">ยากต่อการเปรียบเทียบ</td>
+                            </tr>
+                            <tr>
+                                <td>ปริมาณเอกสารมหาศาล</td>
+                                <td style="color: #f87171;">ขาดแคลนบุคลากร</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="card highlight">
+                        <h3>เป้าหมาย</h3>
+                        <div style="font-size: 1.3rem; text-align: center; padding: 30px;">
+                            <p style="margin-bottom: 20px;">แปลงเอกสาร PDF</p>
+                            <p style="font-size: 3rem; color: #00d4ff;">↓</p>
+                            <p style="color: #10b981; font-size: 1.5rem;">ข้อมูลที่มีโครงสร้าง<br>(CSV / Database)</p>
+                            <p style="margin-top: 20px; color: #94a3b8;">อัตโนมัติ 100%</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 3: Solution Overview -->
+        <div class="slide" id="slide3">
+            <h1>Solution Overview</h1>
+            <h2>5-Phase Processing Pipeline</h2>
+            <div class="content">
+                <div class="pipeline">
+                    <div class="pipeline-step">
+                        <div class="number">1</div>
+                        <div class="label">PDF → Image</div>
+                    </div>
+                    <div class="pipeline-arrow">→</div>
+                    <div class="pipeline-step">
+                        <div class="number">2</div>
+                        <div class="label">OCR (Typhoon)</div>
+                    </div>
+                    <div class="pipeline-arrow">→</div>
+                    <div class="pipeline-step">
+                        <div class="number">3</div>
+                        <div class="label">LLM Parsing (GPT)</div>
+                    </div>
+                    <div class="pipeline-arrow">→</div>
+                    <div class="pipeline-step">
+                        <div class="number">4</div>
+                        <div class="label">JSON → CSV</div>
+                    </div>
+                    <div class="pipeline-arrow">→</div>
+                    <div class="pipeline-step">
+                        <div class="number">5</div>
+                        <div class="label">Summary</div>
+                    </div>
+                </div>
+
+                <div class="two-column" style="margin-top: 30px;">
+                    <div class="card">
+                        <h3>Input</h3>
+                        <ul>
+                            <li>PDF บัญชีทรัพย์สิน ป.ป.ช.</li>
+                            <li>CSV metadata (doc_info, nacc_detail)</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <h3>Output</h3>
+                        <ul>
+                            <li>13+ CSV files (structured data)</li>
+                            <li>SQLite Database</li>
+                            <li>Validation Report</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 4: Technology Stack -->
+        <div class="slide" id="slide4">
+            <h1>Technology Stack</h1>
+            <h2>เทคโนโลยีที่ใช้</h2>
+            <div class="content">
+                <div class="three-column">
+                    <div class="card">
+                        <div class="feature-icon">📷</div>
+                        <h3>OCR Layer</h3>
+                        <ul>
+                            <li><strong>Typhoon OCR API</strong><br>Cloud-based Thai OCR</li>
+                            <li><strong>Ollama (Local)</strong><br>typhoon-ocr1.5-3b model</li>
+                        </ul>
+                    </div>
+                    <div class="card highlight">
+                        <div class="feature-icon">🤖</div>
+                        <h3>AI/LLM Layer</h3>
+                        <ul>
+                            <li><strong>GPT-4o-mini</strong><br>Intelligent extraction</li>
+                            <li><strong>Custom Prompts</strong><br>Thai document optimized</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <div class="feature-icon">⚙️</div>
+                        <h3>Data Processing</h3>
+                        <ul>
+                            <li><strong>Python 3.10+</strong></li>
+                            <li><strong>pdf2image / PyMuPDF</strong></li>
+                            <li><strong>pandas</strong></li>
+                            <li><strong>SQLite</strong></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: Configuration -->
+        <div class="slide" id="slide5">
+            <h1>Configuration</h1>
+            <h2>Easy Setup via .env</h2>
+            <div class="content">
+                <div class="two-column">
+                    <div class="card">
+                        <h3>OCR & LLM Config</h3>
+                        <pre>
+# OCR Configuration
+OCR_METHOD=api
+TYPHOON_API_KEY=xxx
+
+# LLM Configuration
+OPENAI_API_KEY=xxx
+LLM_MODEL=gpt-4o-mini
+LLM_PARSE_MODE=page_by_page
+LLM_MAX_WORKERS=5</pre>
+                    </div>
+                    <div class="card">
+                        <h3>Phase Control</h3>
+                        <pre>
+# Skip phases for debugging
+SKIP_PHASE_1=false  # PDF to Image
+SKIP_PHASE_2=false  # OCR
+SKIP_PHASE_3=false  # LLM Parsing
+SKIP_PHASE_4=false  # JSON to CSV
+SKIP_PHASE_5=false  # Summary</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: Phase 1 & 2 -->
+        <div class="slide" id="slide6">
+            <h1>Phase 1 & 2</h1>
+            <h2>PDF → Image → Text</h2>
+            <div class="content">
+                <div class="two-column">
+                    <div class="card">
+                        <h3>Phase 1: PDF to Image</h3>
+                        <pre>
+pdf_to_images(pdf_path, output_folder)
+
+# Output: PNG 200 DPI per page
+document_output/
+  └── images/
+      ├── page_0001.png
+      ├── page_0002.png
+      └── page_0003.png</pre>
+                        <ul style="margin-top: 20px;">
+                            <li><span class="checkmark">✓</span> รองรับ PDF หลายหน้า</li>
+                            <li><span class="checkmark">✓</span> pdf2image + PyMuPDF fallback</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <h3>Phase 2: OCR Processing</h3>
+                        <table>
+                            <tr><th>Mode</th><th>Provider</th></tr>
+                            <tr><td>API</td><td>OpenTyphoon</td></tr>
+                            <tr><td>Local</td><td>Ollama</td></tr>
+                        </table>
+                        <ul style="margin-top: 20px;">
+                            <li><span class="checkmark">✓</span> Thai language optimized</li>
+                            <li><span class="checkmark">✓</span> Auto retry on rate limit</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Phase 3 - LLM Parsing -->
+        <div class="slide" id="slide7">
+            <h1>Phase 3: LLM Parsing</h1>
+            <h2>Core Innovation - Text to JSON</h2>
+            <div class="content">
+                <div class="two-column">
+                    <div class="card highlight">
+                        <h3>Intelligence Features</h3>
+                        <ul>
+                            <li><strong>Thai OCR Error Correction</strong><br>
+                                <code>ภ → ก, พ → ภ, ม → น</code></li>
+                            <li><strong>Name/Title Parsing</strong><br>
+                                <code>"นายสมชาย ใจดี" → title, first, last</code></li>
+                            <li><strong>Financial Value Parsing</strong><br>
+                                <code>"1,234,567.89" → 1234567.89</code></li>
+                            <li><strong>Date Parsing</strong><br>
+                                <code>พ.ศ. 2567 → Buddhist calendar</code></li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <h3>Processing Modes</h3>
+                        <div style="padding: 20px;">
+                            <div style="margin-bottom: 20px; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                                <strong style="color: #00d4ff;">Combined Mode</strong><br>
+                                Parse all pages at once<br>
+                                <span style="color: #10b981;">✓ Fast</span>
+                            </div>
+                            <div style="padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                                <strong style="color: #00d4ff;">Page-by-Page Mode</strong><br>
+                                Parse individually then merge<br>
+                                <span style="color: #10b981;">✓ Accurate</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 8: Output -->
+        <div class="slide" id="slide8">
+            <h1>Phase 4: Output</h1>
+            <h2>JSON → CSV / Database</h2>
+            <div class="content">
+                <div class="two-column">
+                    <div class="card">
+                        <h3>Output Files (13+ CSV)</h3>
+                        <div class="file-tree">
+                            <span class="folder">Output/</span><br>
+                            ├── <span class="file">submitter_info.csv</span><br>
+                            ├── <span class="file">submitter_position.csv</span><br>
+                            ├── <span class="file">spouse_info.csv</span><br>
+                            ├── <span class="file">relative_info.csv</span><br>
+                            ├── <span class="file">asset.csv</span><br>
+                            ├── <span class="file">asset_land_info.csv</span><br>
+                            ├── <span class="file">asset_building_info.csv</span><br>
+                            ├── <span class="file">asset_vehicle_info.csv</span><br>
+                            ├── <span class="file">statement.csv</span><br>
+                            ├── <span class="file">statement_detail.csv</span><br>
+                            ├── <span class="file">nacc_data.db</span><br>
+                            └── <span class="file">validation_summary.csv</span>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Database Schema</h3>
+                        <ul>
+                            <li><strong>SQLite Database</strong><br>All data in one file</li>
+                            <li><strong>Relational Structure</strong><br>Linked by doc_id, nacc_id</li>
+                            <li><strong>Validation Report</strong><br>Confidence scores</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 9: Architecture -->
+        <div class="slide" id="slide9">
+            <h1>System Architecture</h1>
+            <h2>High-Level Overview</h2>
+            <div class="content">
+                <div class="architecture-diagram">
+                    <div class="layer">
+                        <div class="layer-title">Input Layer</div>
+                        <div class="layer-content">
+                            <div class="layer-item">PDF Files</div>
+                            <div class="layer-item">doc_info.csv</div>
+                            <div class="layer-item">nacc_detail.csv</div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; font-size: 2rem; color: #00d4ff;">↓</div>
+                    <div class="layer">
+                        <div class="layer-title">Processing Pipeline</div>
+                        <div class="layer-content">
+                            <div class="layer-item">Phase 1: pdf2image</div>
+                            <div class="layer-item">Phase 2: Typhoon OCR</div>
+                            <div class="layer-item">Phase 3: GPT-4o-mini</div>
+                            <div class="layer-item">Phase 4: pandas</div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; font-size: 2rem; color: #00d4ff;">↓</div>
+                    <div class="layer">
+                        <div class="layer-title">Output Layer</div>
+                        <div class="layer-content">
+                            <div class="layer-item">13+ CSV Files</div>
+                            <div class="layer-item">SQLite DB</div>
+                            <div class="layer-item">Validation Report</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 10: Demo -->
+        <div class="slide" id="slide10">
+            <h1>Quick Start</h1>
+            <h2>Demo & Setup</h2>
+            <div class="content">
+                <div class="card">
+                    <h3>Installation</h3>
+                    <pre>
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# 3. Run pipeline
+python app.py</pre>
+                </div>
+                <div class="card" style="margin-top: 10px;">
+                    <h3>Output Location</h3>
+                    <div class="file-tree">
+                        <span class="folder">./output/</span><br>
+                        ├── <span class="file">*.json</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Parsed data<br>
+                        ├── <span class="file">Train_*.csv</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Output CSVs<br>
+                        ├── <span class="file">nacc_data.db</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# SQLite database<br>
+                        └── <span class="file">validation_summary.csv</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 11: Summary -->
+        <div class="slide" id="slide11">
+            <h1>Summary</h1>
+            <h2>สรุป</h2>
+            <div class="content">
+                <div class="card highlight" style="max-width: 800px; margin: 0 auto;">
+                    <h3 style="text-align: center; margin-bottom: 30px;">NACC Asset Declaration Parser</h3>
+                    <ul style="font-size: 1.2rem;">
+                        <li><span class="checkmark">✓</span> <strong>ปัญหาที่แก้:</strong> แปลง PDF บัญชีทรัพย์สินเป็นข้อมูลมีโครงสร้าง</li>
+                        <li><span class="checkmark">✓</span> <strong>เทคโนโลยี:</strong> Typhoon OCR + LLM (GPT-4o-mini) + Python</li>
+                        <li><span class="checkmark">✓</span> <strong>Output:</strong> 13+ CSV files + SQLite Database</li>
+                        <li><span class="checkmark">✓</span> <strong>จุดเด่น:</strong> รองรับภาษาไทย, ประมวลผลอัตโนมัติ, Scalable</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 12: Key Features -->
+        <div class="slide" id="slide12">
+            <h1>Key Features</h1>
+            <h2>จุดเด่นของระบบ</h2>
+            <div class="content">
+                <div class="three-column">
+                    <div class="card">
+                        <div class="feature-icon">🇹🇭</div>
+                        <h3>Thai Optimized</h3>
+                        <p>รองรับภาษาไทยเต็มรูปแบบ พร้อมแก้ไข OCR errors อัตโนมัติ</p>
+                    </div>
+                    <div class="card">
+                        <div class="feature-icon">🔄</div>
+                        <h3>Flexible</h3>
+                        <p>Skip phases ได้ตามต้องการ รองรับทั้ง API และ Local OCR</p>
+                    </div>
+                    <div class="card">
+                        <div class="feature-icon">⚡</div>
+                        <h3>Scalable</h3>
+                        <p>Parallel processing รองรับเอกสารจำนวนมาก</p>
+                    </div>
+                </div>
+                <div class="three-column" style="margin-top: 20px;">
+                    <div class="card">
+                        <div class="feature-icon">🛡️</div>
+                        <h3>Reliable</h3>
+                        <p>Retry mechanism, Graceful fallbacks, Error handling</p>
+                    </div>
+                    <div class="card">
+                        <div class="feature-icon">📊</div>
+                        <h3>Comprehensive</h3>
+                        <p>13+ CSV files, SQLite database, Validation reports</p>
+                    </div>
+                    <div class="card">
+                        <div class="feature-icon">🎯</div>
+                        <h3>Accurate</h3>
+                        <p>Confidence scoring, LLM validation, Quality assurance</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 13: Recommendations -->
+        <div class="slide" id="slide13">
+            <h1>ข้อเสนอแนะ</h1>
+            <h2>Recommendations for Future</h2>
+            <div class="content">
+                <div class="two-column">
+                    <div class="card warning">
+                        <div class="feature-icon">⚠️</div>
+                        <h3>ปัญหาจากการเขียนมือ</h3>
+                        <ul>
+                            <li>ลายมือไม่ชัดเจน อ่านยาก</li>
+                            <li>ข้อมูลไม่เป็นมาตรฐาน</li>
+                            <li>OCR ทำงานได้ยาก</li>
+                            <li>เกิดข้อผิดพลาดในการแปลง</li>
+                        </ul>
+                    </div>
+                    <div class="card highlight">
+                        <div class="feature-icon">💡</div>
+                        <h3>ข้อเสนอแนะ</h3>
+                        <ul>
+                            <li><strong>พัฒนาระบบ Web/Mobile App</strong><br>สำหรับกรอกข้อมูลโดยตรง</li>
+                            <li><strong>Digital Form</strong><br>แทนการเขียนด้วยมือ</li>
+                            <li><strong>Validation ทันที</strong><br>ตรวจสอบความถูกต้องขณะกรอก</li>
+                            <li><strong>ลด Human Error</strong><br>ข้อมูลเป็นมาตรฐานเดียวกัน</li>
+                        </ul>
+                    </div>
+                </div>
+               
+            </div>
+        </div>
+
+        <!-- Slide 14: Thank You -->
+        <div class="slide thank-you" id="slide14">
+            <h1>ขอบคุณครับ</h1>
+            <h2 style="margin-top: 20px;">Q&A</h2>
+            <div style="margin-top: 60px;">
+                <span class="tech-badge">Python</span>
+                <span class="tech-badge">Typhoon OCR</span>
+                <span class="tech-badge">GPT-4o-mini</span>
+                <span class="tech-badge">SQLite</span>
+            </div>
+            <p style="margin-top: 40px; color: #94a3b8;">
+                <a href="https://www.kaggle.com/competitions/hack-the-assetdeclaration-data/overview" target="_blank" class="kaggle-link">
+                    Kaggle: Hack the Asset Declaration Data
+                </a>
+            </p>
+        </div>
+    </div>
+
+    <div class="navigation">
+        <button class="nav-btn" onclick="prevSlide()">←</button>
+        <button class="nav-btn" onclick="nextSlide()">→</button>
+    </div>
+
+    <div class="slide-counter" id="slideCounter">1 / 14</div>
+    <div class="keyboard-hint">Use ← → or Space to navigate</div>
+
+    <script>
+        let currentSlide = 1;
+        const totalSlides = 14;
+
+        function showSlide(n) {
+            if (n < 1) n = 1;
+            if (n > totalSlides) n = totalSlides;
+
+            document.querySelectorAll('.slide').forEach(slide => {
+                slide.classList.remove('active');
+            });
+
+            document.getElementById('slide' + n).classList.add('active');
+            currentSlide = n;
+
+            document.getElementById('slideCounter').textContent = n + ' / ' + totalSlides;
+            document.getElementById('progressBar').style.width = (n / totalSlides * 100) + '%';
+        }
+
+        function nextSlide() {
+            showSlide(currentSlide + 1);
+        }
+
+        function prevSlide() {
+            showSlide(currentSlide - 1);
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                prevSlide();
+            }
+        });
+
+        // Touch support for mobile
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+        });
+
+        document.addEventListener('touchend', e => {
+            touchEndX = e.changedTouches[0].screenX;
+            if (touchStartX - touchEndX > 50) nextSlide();
+            if (touchEndX - touchStartX > 50) prevSlide();
+        });
+    </script>
+</body>
+</html>

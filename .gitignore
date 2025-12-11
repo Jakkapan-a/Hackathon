@@ -16,3 +16,5 @@ training/
 
 venv/*
 *__pycache__*
+
+*.rar
