@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NACC Asset Declaration Parser - Presentation</title>
+    <title>Hackathon - Presentation</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap');
 
@@ -379,6 +379,152 @@
         .kaggle-link:hover {
             text-decoration: underline;
         }
+
+        /* ==================== PRINT STYLES ==================== */
+        @media print {
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+
+            body {
+                background: #1a1a2e !important;
+                overflow: visible !important;
+            }
+
+            .presentation {
+                width: auto !important;
+                height: auto !important;
+                position: static !important;
+            }
+
+            .slide {
+                display: flex !important;
+                position: relative !important;
+                width: 100% !important;
+                height: 100vh !important;
+                page-break-after: always !important;
+                break-after: page !important;
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%) !important;
+                padding: 40px 60px !important;
+                animation: none !important;
+            }
+
+            .slide:last-child {
+                page-break-after: avoid !important;
+            }
+
+            /* Hide navigation elements */
+            .navigation,
+            .slide-counter,
+            .keyboard-hint,
+            .progress-bar {
+                display: none !important;
+            }
+
+            /* Fix gradient text for print */
+            h1 {
+                background: none !important;
+                -webkit-background-clip: unset !important;
+                background-clip: unset !important;
+                -webkit-text-fill-color: #00d4ff !important;
+                color: #00d4ff !important;
+            }
+
+            /* Ensure cards print with background */
+            .card {
+                background: rgba(255, 255, 255, 0.08) !important;
+                border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            }
+
+            .card.highlight {
+                border-color: #00d4ff !important;
+            }
+
+            .card.warning {
+                border-color: #fbbf24 !important;
+            }
+
+            /* Pipeline steps */
+            .pipeline-step {
+                background: rgba(0, 212, 255, 0.15) !important;
+                border: 1px solid rgba(0, 212, 255, 0.4) !important;
+            }
+
+            /* Tech badges */
+            .tech-badge {
+                background: linear-gradient(135deg, #00d4ff, #7c3aed) !important;
+            }
+
+            /* Architecture diagram */
+            .architecture-diagram {
+                background: rgba(0, 0, 0, 0.4) !important;
+            }
+
+            .layer {
+                background: rgba(0, 212, 255, 0.15) !important;
+            }
+
+            /* Code blocks */
+            pre {
+                background: rgba(0, 0, 0, 0.5) !important;
+            }
+
+            /* File tree */
+            .file-tree {
+                background: rgba(0, 0, 0, 0.4) !important;
+            }
+
+            /* Recommendation item */
+            .recommendation-item {
+                background: rgba(251, 191, 36, 0.15) !important;
+            }
+
+            /* Table */
+            th {
+                background: rgba(0, 212, 255, 0.15) !important;
+            }
+
+            /* Links */
+            .kaggle-link {
+                color: #00d4ff !important;
+            }
+
+            /* Page settings */
+            @page {
+                size: landscape;
+                margin: 0;
+            }
+        }
+
+        /* Print button style */
+        .print-btn {
+            position: fixed;
+            top: 30px;
+            right: 30px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 2px solid #00d4ff;
+            background: rgba(0, 212, 255, 0.1);
+            color: #00d4ff;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 100;
+            font-family: 'Noto Sans Thai', sans-serif;
+        }
+
+        .print-btn:hover {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+
+        @media print {
+            .print-btn {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -401,7 +547,11 @@
                     Kaggle Competition: Hack the Asset Declaration Data
                 </a>
             </p>
-            <p style="margin-top: 60px; color: #64748b;">กด → หรือ Space เพื่อไปหน้าถัดไป</p>
+            <div style="margin-top: 30px; padding: 15px 30px; background: rgba(0, 212, 255, 0.1); border: 2px solid #00d4ff; border-radius: 12px; display: inline-block;">
+                <span style="color: #00d4ff; font-size: 1.1rem; font-weight: 700; margin-left: 10px;">FILEWORK</span>
+                <span style="color: #94a3b8; font-size: 1.2rem;">Team</span>
+            </div>
+            <p style="margin-top: 30px; color: #64748b;">กด → หรือ Space เพื่อไปหน้าถัดไป</p>
         </div>
 
         <!-- Slide 2: Problem Statement -->
@@ -648,22 +798,25 @@ document_output/
             <div class="content">
                 <div class="two-column">
                     <div class="card">
-                        <h3>Output Files (13+ CSV)</h3>
-                        <div class="file-tree">
+                        <h3>Output Files (14 CSV)</h3>
+                        <div class="file-tree" style="font-size: 0.8rem;">
                             <span class="folder">Output/</span><br>
-                            ├── <span class="file">submitter_info.csv</span><br>
-                            ├── <span class="file">submitter_position.csv</span><br>
-                            ├── <span class="file">spouse_info.csv</span><br>
-                            ├── <span class="file">relative_info.csv</span><br>
+                            ├── <span class="file">statement.csv</span><br>
+                            ├── <span class="file">statement_detail.csv</span><br>
                             ├── <span class="file">asset.csv</span><br>
                             ├── <span class="file">asset_land_info.csv</span><br>
                             ├── <span class="file">asset_building_info.csv</span><br>
                             ├── <span class="file">asset_vehicle_info.csv</span><br>
-                            ├── <span class="file">statement.csv</span><br>
-                            ├── <span class="file">statement_detail.csv</span><br>
-                            ├── <span class="file">nacc_data.db</span><br>
-                            └── <span class="file">validation_summary.csv</span>
+                            ├── <span class="file">asset_other_asset_info.csv</span><br>
+                            ├── <span class="file">relative_info.csv</span><br>
+                            ├── <span class="file">spouse_info.csv</span><br>
+                            ├── <span class="file">spouse_old_name.csv</span><br>
+                            ├── <span class="file">spouse_position.csv</span><br>
+                            ├── <span class="file">submitter_old_name.csv</span><br>
+                            ├── <span class="file">submitter_position.csv</span><br>
+                            └── <span class="file">summary.csv</span>
                         </div>
+                        <p style="margin-top: 10px; color: #94a3b8; font-size: 0.9rem;">+ nacc_data.db (SQLite)</p>
                     </div>
                     <div class="card">
                         <h3>Database Schema</h3>
@@ -852,6 +1005,8 @@ python app.py</pre>
             </p>
         </div>
     </div>
+
+    <!-- <button class="print-btn" onclick="window.print()">🖨️ Print PDF</button> -->
 
     <div class="navigation">
         <button class="nav-btn" onclick="prevSlide()">←</button>
