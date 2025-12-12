@@ -413,29 +413,29 @@ class JSONToCSVConverter:
 
         # Load spouse_id mapping from Train_spouse_info.csv
         # Look for it in training folder or same directory
-        spouse_info_paths = [
-            os.path.join(os.path.dirname(input_dir), "training", "train output", "Train_spouse_info.csv"),
-            os.path.join(input_dir, "Train_spouse_info.csv"),
-            os.path.join(input_dir, "..", "training", "train output", "Train_spouse_info.csv"),
-            "training/train output/Train_spouse_info.csv"
-        ]
+        # spouse_info_paths = [
+        #     os.path.join(os.path.dirname(input_dir), "training", "train output", "Train_spouse_info.csv"),
+        #     os.path.join(input_dir, "Train_spouse_info.csv"),
+        #     os.path.join(input_dir, "..", "training", "train output", "Train_spouse_info.csv"),
+        #     "training/train output/Train_spouse_info.csv"
+        # ]
 
-        spouse_info_loaded = False
-        for spouse_info_path in spouse_info_paths:
-            if os.path.exists(spouse_info_path):
-                with open(spouse_info_path, 'r', encoding='utf-8-sig') as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        nacc_id = row.get('nacc_id', '')
-                        spouse_id = row.get('spouse_id', '')
-                        if nacc_id and spouse_id:
-                            self.spouse_id_map[nacc_id] = spouse_id
-                print(f"[OK] Loaded {len(self.spouse_id_map)} spouse_id mappings from {spouse_info_path}")
-                spouse_info_loaded = True
-                break
+        # spouse_info_loaded = False
+        # for spouse_info_path in spouse_info_paths:
+        #     if os.path.exists(spouse_info_path):
+        #         with open(spouse_info_path, 'r', encoding='utf-8-sig') as f:
+        #             reader = csv.DictReader(f)
+        #             for row in reader:
+        #                 nacc_id = row.get('nacc_id', '')
+        #                 spouse_id = row.get('spouse_id', '')
+        #                 if nacc_id and spouse_id:
+        #                     self.spouse_id_map[nacc_id] = spouse_id
+        #         print(f"[OK] Loaded {len(self.spouse_id_map)} spouse_id mappings from {spouse_info_path}")
+        #         spouse_info_loaded = True
+        #         break
 
-        if not spouse_info_loaded:
-            print("[ERR] Train_spouse_info.csv not found - will use counter for spouse_id")
+        # if not spouse_info_loaded:
+        #     print("[ERR] Train_spouse_info.csv not found - will use counter for spouse_id")
 
     def _normalize_thai_text(self, text: str) -> str:
         """Normalize Thai text for comparison by removing extra spaces and normalizing Unicode"""
