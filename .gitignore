@@ -3,9 +3,10 @@ test phase 1/
 test_final/
 training/
 venv/
+test phase 1/
 
 # Ignore all CSV, TXT, and PDF files
-*.csv
+# *.csv
 *.pdf
 *.sql
 *.png
