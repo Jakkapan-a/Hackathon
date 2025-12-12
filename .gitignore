@@ -4,6 +4,7 @@ test_final/
 training/
 venv/
 test phase 1/
+test demo/
 
 # Ignore all CSV, TXT, and PDF files
 # *.csv

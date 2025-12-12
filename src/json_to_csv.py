@@ -1472,7 +1472,7 @@ class JSONToCSVConverter:
             self.import_input_tables(cursor, input_dir)
 
             # Import training data for comparison
-            self.import_training_data(cursor, training_dir)
+            # self.import_training_data(cursor, training_dir)
         else:
             # Use built-in asset_type data
             self._insert_asset_type(cursor)
