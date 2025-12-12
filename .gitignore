@@ -2,6 +2,7 @@
 test phase 1/
 test_final/
 training/
+venv/
 
 # Ignore all CSV, TXT, and PDF files
 *.csv
